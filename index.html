@@ -840,12 +840,18 @@ var TP = (function () {
     }
     return pickFrom(u.length ? u : pool.map(function (p) { return keyOf(p.digits); }), rng);
   }
+  var NEXT_MIX_RATE = 0.10; // v0.8.1：「次の組へ」「次の問題へ」で未解決全体から引く確率
   // 「次の組へ」：同じティアの未解決からランダム。尽きたら次（上）のティアへ進み、
   // 全ティアが尽きた／作れない組のあとは未解決全体から、未解決が無ければ全組から（A3、v0.3）
   function pickNext(pool, save, currentKey, rng) {
     var by = indexPool(pool);
     var cur = by[currentKey];
     var u = unresolvedKeys(pool, save).filter(function (k) { return k !== currentKey; });
+    // v0.8.1：10% の確率で、ティアに関係なく未解決全体から均等に引く（作れない組も対象）。
+    // ティア連鎖だけだと、ティアを持たない作れない組が構造的に出てこないため（当初決定「作れない組を通常モードに混ぜる」）
+    var r = rng || Math.random;
+    var roll = r();
+    if (u.length && roll < NEXT_MIX_RATE) return pickFrom(u, r);
     if (cur && cur.solvable) {
       for (var t = TIERS.indexOf(cur.tier); t >= 0 && t < TIERS.length; t++) {
         var same = u.filter(function (k) { return by[k].tier === TIERS[t]; });
@@ -1272,7 +1278,7 @@ var TP = (function () {
     hintsFor: hintsFor, useHint: useHint, starsFor: starsFor, solve: solve, declare: declare,
     unresolvedKeys: unresolvedKeys, pickPlay: pickPlay, pickNext: pickNext,
     zukanSections: zukanSections, tileInfo: tileInfo, resolvedCount: resolvedCount, tierLabel: tierLabel,
-    isFreshSave: isFreshSave, FIRST_PLAY_TIERS: FIRST_PLAY_TIERS,
+    NEXT_MIX_RATE: NEXT_MIX_RATE, isFreshSave: isFreshSave, FIRST_PLAY_TIERS: FIRST_PLAY_TIERS,
     EXPORT_FORMAT: EXPORT_FORMAT, exportSave: exportSave, exportFileName: exportFileName, parseCanon: parseCanon,
     isValidCanonFor: isValidCanonFor, validateSave: validateSave, parseImport: parseImport, saveSummary: saveSummary,
     SETTINGS_KEY: SETTINGS_KEY, defaultSettings: defaultSettings, loadSettings: loadSettings, writeSettings: writeSettings,
