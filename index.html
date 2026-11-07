@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>テンパズル v0.3</title>
+<style>
+:root{
+  --bg:#f6f3ec; --panel:#ffffff; --ink:#1f2430; --sub:#6b7080; --line:#e3ddd0;
+  --accent:#e2552d; --accent-ink:#ffffff; --sel:#ffd34d; --ok:#2f9e5b; --ng:#c8382b;
+  --gold:#c99a2e; --gold-bg:#fff6dc; --chip:#efe9dc; --card:#fffdf8; --shadow:0 2px 0 rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181d; --panel:#21242b; --ink:#eef0f4; --sub:#9aa0ad; --line:#343844;
+    --accent:#ff7a4d; --accent-ink:#1a1a1a; --sel:#e3b53a; --ok:#4cc27e; --ng:#ff6b5e;
+    --gold:#e6bb4f; --gold-bg:#3a3220; --chip:#2c3039; --card:#272b33; --shadow:0 2px 0 rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181d; --panel:#21242b; --ink:#eef0f4; --sub:#9aa0ad; --line:#343844;
+  --accent:#ff7a4d; --accent-ink:#1a1a1a; --sel:#e3b53a; --ok:#4cc27e; --ng:#ff6b5e;
+  --gold:#e6bb4f; --gold-bg:#3a3220; --chip:#2c3039; --card:#272b33; --shadow:0 2px 0 rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic UI",sans-serif;
+  -webkit-tap-highlight-color:transparent;line-height:1.5}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none;padding:0}
+button:disabled{cursor:default;opacity:.4}
+#app{max-width:480px;margin:0 auto;padding:12px 16px 32px;min-height:100vh}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:12px;padding:10px 14px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);font-weight:600}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.wide{width:100%;padding:14px}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.sub{color:var(--sub);font-size:.85rem}
+.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 10px;font-size:.8rem;font-weight:600}
+
+/* タイトル */
+.title-wrap{display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:12vh;text-align:center}
+.logo{font-size:2.6rem;font-weight:900;letter-spacing:.06em}
+.logo b{color:var(--accent)}
+.tag{color:var(--sub)}
+.stats{display:flex;gap:10px;width:100%}
+.stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px}
+.stat .v{font-size:1.4rem;font-weight:800;font-variant-numeric:tabular-nums}
+.title-btns{display:flex;flex-direction:column;gap:10px;width:100%;margin-top:6px}
+
+/* ヘッダ */
+.bar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.bar .grow{flex:1;min-width:0}
+.bar h2{margin:0;font-size:1.15rem}
+
+/* 図鑑 */
+.sec{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.sec-h{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.sec-h .name{font-weight:800}
+.sec-h .cnt{margin-left:auto;color:var(--sub);font-variant-numeric:tabular-nums;font-size:.9rem}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px}
+.tile{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--card);padding:6px 4px 4px;text-align:center;min-height:56px}
+.tile .d{font-weight:800;letter-spacing:.12em;font-variant-numeric:tabular-nums;font-size:1.05rem}
+.tile .s{font-size:.72rem;color:var(--sub);white-space:nowrap}
+.tile .stars{color:var(--gold);letter-spacing:.05em}
+.tile.gold{border:2px solid var(--gold);background:var(--gold-bg)}
+.tile.wip::after{content:"途中";position:absolute;top:-6px;right:-4px;background:var(--accent);color:var(--accent-ink);font-size:.62rem;padding:0 5px;border-radius:6px}
+.stamp{display:inline-block;border:2px solid var(--ng);color:var(--ng);border-radius:6px;padding:0 4px;font-size:.7rem;font-weight:800;transform:rotate(-6deg)}
+.grp{border-top:1px dashed var(--line)}
+.grp:first-of-type{border-top:none}
+.grp-h{display:flex;width:100%;align-items:center;padding:8px 2px;font-weight:700}
+.grp-h .cnt{margin-left:auto;color:var(--sub);font-weight:500;font-size:.85rem}
+.grp-h .arrow{display:inline-block;width:1.1em;transition:transform .15s}
+.grp.open .arrow{transform:rotate(90deg)}
+.grp .tiles{padding-bottom:8px}
+
+/* プレイ */
+.play-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.play-head .digits{font-size:1.5rem;font-weight:900;letter-spacing:.2em;flex:1;text-align:center}
+.score-mini{font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem;color:var(--sub);text-align:right;min-width:64px}
+.cards{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:18px 0 14px;min-height:112px;align-items:center}
+.card{position:relative;width:76px;height:100px;border-radius:14px;background:var(--card);border:2px solid var(--line);box-shadow:var(--shadow);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;transition:transform .08s}
+.card:active{transform:scale(.97)}
+.card.sel{border-color:var(--sel);background:color-mix(in srgb,var(--sel) 22%,var(--card));transform:translateY(-4px)}
+.card .ord{position:absolute;top:-9px;left:-7px;width:22px;height:22px;border-radius:50%;background:var(--sel);color:#1a1a1a;font-size:.75rem;font-weight:900;display:flex;align-items:center;justify-content:center}
+.card .num{font-size:2rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+.frac{display:inline-flex;flex-direction:column;align-items:center;line-height:1.05;font-weight:900;font-variant-numeric:tabular-nums}
+.frac .fn{border-bottom:2px solid currentColor;padding:0 3px}
+.card .frac{font-size:1.45rem}
+.frac-wrap{display:inline-flex;align-items:center;gap:2px}
+.card .approx{font-size:.68rem;color:var(--sub);margin-top:4px}
+.card.won{border-color:var(--ok)}
+.ops{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.op{border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);padding:10px 6px;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.op .sym{font-size:1.5rem;font-weight:900;line-height:1}
+.op .pv{font-size:.75rem;color:var(--sub);margin-top:2px;white-space:nowrap}
+.op.bad .pv{color:var(--ng)}
+.swap-row{display:flex;justify-content:center;margin:8px 0}
+.tools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.declare{margin-top:10px;border:2px dashed var(--ng);color:var(--ng);background:transparent;box-shadow:none}
+.msg{min-height:1.6em;text-align:center;font-weight:700;margin-top:4px}
+.msg.ng{color:var(--ng)} .msg.ok{color:var(--ok)}
+.hints{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:.92rem}
+.hints p{margin:4px 0}
+.hints .note{font-size:.75rem;color:var(--sub)}
+
+/* 結果 */
+.res{text-align:center;padding-top:4vh}
+.res h2{font-size:1.8rem;margin:.2em 0}
+.res .expr{font-size:1.6rem;font-weight:900;margin:8px 0 2px;letter-spacing:.03em;word-break:break-all}
+.res .big-stars{font-size:2rem;color:var(--gold);letter-spacing:.1em}
+.breakdown{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin:14px 0;text-align:left}
+.breakdown .ln{display:flex;justify-content:space-between;padding:3px 0;font-variant-numeric:tabular-nums}
+.breakdown .ln.tot{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-weight:800}
+.newsol{font-weight:800;color:var(--accent)}
+.techs{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:6px 0}
+.big-stamp{display:inline-block;border:4px solid var(--ng);color:var(--ng);border-radius:12px;padding:4px 14px;font-size:1.6rem;font-weight:900;transform:rotate(-8deg);margin:10px 0}
+.res .btns{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+
+/* v0.3：データ・設定・操作方法A */
+.data-row{display:flex;gap:8px;width:100%}
+.data-row .btn{flex:1;font-size:.9rem;padding:9px 8px}
+.tmsg{min-height:1.4em;font-weight:700;font-size:.9rem}
+.tmsg.ng{color:var(--ng)} .tmsg.ok{color:var(--ok)}
+.opt{display:block;width:100%;text-align:left;background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.opt.on{border-color:var(--accent)}
+.opt .h{font-weight:800;display:flex;align-items:center;gap:8px}
+.opt .dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--sub);display:inline-block;flex:none}
+.opt.on .dot{border-color:var(--accent);background:radial-gradient(var(--accent) 45%,transparent 50%)}
+.opt .sub{margin-top:4px}
+.expr-box{text-align:center;font-size:1.6rem;font-weight:900;min-height:2.2rem;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.guide{text-align:center;color:var(--sub);font-weight:700;margin-bottom:8px}
+.op.on{border:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--panel))}
+.mode-chip{font-size:.7rem}
+
+/* モーダル */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal{background:var(--panel);border-radius:16px;padding:18px;max-width:360px;width:100%;text-align:center}
+.modal p{margin:6px 0 14px;font-weight:700;font-size:1.1rem}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<input type="file" id="import-file" accept=".json,application/json" hidden>
+<script id="pool-data" type="application/json">[{"digits": [1, 1, 1, 1], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 1}, {"digits": [1, 1, 1, 2], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [1, 1, 1, 3], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [1, 1, 1, 4], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(1+1)×(1+4)", "integerExample": "(1+1)×(1+4)", "weight": 4}, {"digits": [1, 1, 1, 5], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "(1+1)×1×5", "integerExample": "(1+1)×1×5", "weight": 4}, {"digits": [1, 1, 1, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(1+1)×(6-1)", "integerExample": "(1+1)×(6-1)", "weight": 4}, {"digits": [1, 1, 1, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "1+1+1+7", "integerExample": "1+1+1+7", "weight": 4}, {"digits": [1, 1, 1, 8], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "1+1+1×8", "integerExample": "1+1+1×8", "weight": 4}, {"digits": [1, 1, 1, 9], "solvable": true, "nSolutions": 49, "fractionRequired": false, "tier": "入門", "example": "1+1-(1-9)", "integerExample": "1+1-(1-9)", "weight": 4}, {"digits": [1, 1, 2, 2], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [1, 1, 2, 3], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "(1+1)×(2+3)", "integerExample": "(1+1)×(2+3)", "weight": 12}, {"digits": [1, 1, 2, 4], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "1+1+2×4", "integerExample": "1+1+2×4", "weight": 12}, {"digits": [1, 1, 2, 5], "solvable": true, "nSolutions": 61, "fractionRequired": false, "tier": "入門", "example": "1-1+2×5", "integerExample": "1-1+2×5", "weight": 12}, {"digits": [1, 1, 2, 6], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "1+1+2+6", "integerExample": "1+1+2+6", "weight": 12}, {"digits": [1, 1, 2, 7], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "(1+1)×(7-2)", "integerExample": "(1+1)×(7-2)", "weight": 12}, {"digits": [1, 1, 2, 8], "solvable": true, "nSolutions": 61, "fractionRequired": false, "tier": "入門", "example": "1-1+2+8", "integerExample": "1-1+2+8", "weight": 12}, {"digits": [1, 1, 2, 9], "solvable": true, "nSolutions": 60, "fractionRequired": false, "tier": "入門", "example": "9+2÷(1+1)", "integerExample": "9+2÷(1+1)", "weight": 12}, {"digits": [1, 1, 3, 3], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "1×1+3×3", "integerExample": "1×1+3×3", "weight": 6}, {"digits": [1, 1, 3, 4], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "3×4-(1+1)", "integerExample": "3×4-(1+1)", "weight": 12}, {"digits": [1, 1, 3, 5], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "1+1+3+5", "integerExample": "1+1+3+5", "weight": 12}, {"digits": [1, 1, 3, 6], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "1×1+3+6", "integerExample": "1×1+3+6", "weight": 12}, {"digits": [1, 1, 3, 7], "solvable": true, "nSolutions": 61, "fractionRequired": false, "tier": "入門", "example": "1-1+3+7", "integerExample": "1-1+3+7", "weight": 12}, {"digits": [1, 1, 3, 8], "solvable": true, "nSolutions": 51, "fractionRequired": false, "tier": "入門", "example": "(1+1)×(8-3)", "integerExample": "(1+1)×(8-3)", "weight": 12}, {"digits": [1, 1, 3, 9], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "3+9-(1+1)", "integerExample": "3+9-(1+1)", "weight": 12}, {"digits": [1, 1, 4, 4], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "1+1+4+4", "integerExample": "1+1+4+4", "weight": 6}, {"digits": [1, 1, 4, 5], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "4×5÷(1+1)", "integerExample": "4×5÷(1+1)", "weight": 12}, {"digits": [1, 1, 4, 6], "solvable": true, "nSolutions": 61, "fractionRequired": false, "tier": "入門", "example": "1-1+4+6", "integerExample": "1-1+4+6", "weight": 12}, {"digits": [1, 1, 4, 7], "solvable": true, "nSolutions": 51, "fractionRequired": false, "tier": "入門", "example": "7×(1+1)-4", "integerExample": "7×(1+1)-4", "weight": 12}, {"digits": [1, 1, 4, 8], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "4+8-(1+1)", "integerExample": "4+8-(1+1)", "weight": 12}, {"digits": [1, 1, 4, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(1+1)×(9-4)", "integerExample": "(1+1)×(9-4)", "weight": 12}, {"digits": [1, 1, 5, 5], "solvable": true, "nSolutions": 38, "fractionRequired": false, "tier": "初級", "example": "1-1+5+5", "integerExample": "1-1+5+5", "weight": 6}, {"digits": [1, 1, 5, 6], "solvable": true, "nSolutions": 50, "fractionRequired": false, "tier": "入門", "example": "5+6-1×1", "integerExample": "5+6-1×1", "weight": 12}, {"digits": [1, 1, 5, 7], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "5+7-(1+1)", "integerExample": "5+7-(1+1)", "weight": 12}, {"digits": [1, 1, 5, 8], "solvable": true, "nSolutions": 1, "fractionRequired": true, "tier": "名人", "example": "8÷(1-1÷5)", "integerExample": null, "weight": 12}, {"digits": [1, 1, 5, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 1, 6, 6], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "6+6-(1+1)", "integerExample": "6+6-(1+1)", "weight": 6}, {"digits": [1, 1, 6, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "7+6÷(1+1)", "integerExample": "7+6÷(1+1)", "weight": 12}, {"digits": [1, 1, 6, 8], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "8×(1+1)-6", "integerExample": "8×(1+1)-6", "weight": 12}, {"digits": [1, 1, 6, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 1, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [1, 1, 7, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 1, 7, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 1, 8, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [1, 1, 8, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "9×(1+1)-8", "integerExample": "9×(1+1)-8", "weight": 12}, {"digits": [1, 1, 9, 9], "solvable": true, "nSolutions": 1, "fractionRequired": true, "tier": "名人", "example": "9×(1+1÷9)", "integerExample": null, "weight": 6}, {"digits": [1, 2, 2, 2], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "2×(2+1+2)", "integerExample": "2×(2+1+2)", "weight": 4}, {"digits": [1, 2, 2, 3], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "1×2×(2+3)", "integerExample": "1×2×(2+3)", "weight": 12}, {"digits": [1, 2, 2, 4], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "4+2×(1+2)", "integerExample": "4+2×(1+2)", "weight": 12}, {"digits": [1, 2, 2, 5], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "1+2+2+5", "integerExample": "1+2+2+5", "weight": 12}, {"digits": [1, 2, 2, 6], "solvable": true, "nSolutions": 33, "fractionRequired": false, "tier": "初級", "example": "2×(6+1-2)", "integerExample": "2×(6+1-2)", "weight": 12}, {"digits": [1, 2, 2, 7], "solvable": true, "nSolutions": 31, "fractionRequired": false, "tier": "初級", "example": "2+7-(1-2)", "integerExample": "2+7-(1-2)", "weight": 12}, {"digits": [1, 2, 2, 8], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "2×(8-(1+2))", "integerExample": "2×(8-(1+2))", "weight": 12}, {"digits": [1, 2, 2, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "1+2-(2-9)", "integerExample": "1+2-(2-9)", "weight": 12}, {"digits": [1, 2, 3, 3], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "3×3-(1-2)", "integerExample": "3×3-(1-2)", "weight": 12}, {"digits": [1, 2, 3, 4], "solvable": true, "nSolutions": 30, "fractionRequired": false, "tier": "初級", "example": "1+2+3+4", "integerExample": "1+2+3+4", "weight": 24}, {"digits": [1, 2, 3, 5], "solvable": true, "nSolutions": 33, "fractionRequired": false, "tier": "初級", "example": "5×(3+1-2)", "integerExample": "5×(3+1-2)", "weight": 24}, {"digits": [1, 2, 3, 6], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "3+6-(1-2)", "integerExample": "3+6-(1-2)", "weight": 24}, {"digits": [1, 2, 3, 7], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "7-3×(1-2)", "integerExample": "7-3×(1-2)", "weight": 24}, {"digits": [1, 2, 3, 8], "solvable": true, "nSolutions": 36, "fractionRequired": false, "tier": "初級", "example": "1-2+3+8", "integerExample": "1-2+3+8", "weight": 24}, {"digits": [1, 2, 3, 9], "solvable": true, "nSolutions": 67, "fractionRequired": false, "tier": "入門", "example": "9+3÷(1+2)", "integerExample": "9+3÷(1+2)", "weight": 24}, {"digits": [1, 2, 4, 4], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "1×2+4+4", "integerExample": "1×2+4+4", "weight": 12}, {"digits": [1, 2, 4, 5], "solvable": true, "nSolutions": 95, "fractionRequired": false, "tier": "入門", "example": "4+5-(1-2)", "integerExample": "4+5-(1-2)", "weight": 24}, {"digits": [1, 2, 4, 6], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "6-4×(1-2)", "integerExample": "6-4×(1-2)", "weight": 24}, {"digits": [1, 2, 4, 7], "solvable": true, "nSolutions": 37, "fractionRequired": false, "tier": "初級", "example": "1-2+4+7", "integerExample": "1-2+4+7", "weight": 24}, {"digits": [1, 2, 4, 8], "solvable": true, "nSolutions": 68, "fractionRequired": false, "tier": "入門", "example": "4+8-1×2", "integerExample": "4+8-1×2", "weight": 24}, {"digits": [1, 2, 4, 9], "solvable": true, "nSolutions": 48, "fractionRequired": false, "tier": "入門", "example": "4+9-(1+2)", "integerExample": "4+9-(1+2)", "weight": 24}, {"digits": [1, 2, 5, 5], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "5×(5-(1+2))", "integerExample": "5×(5-(1+2))", "weight": 12}, {"digits": [1, 2, 5, 6], "solvable": true, "nSolutions": 33, "fractionRequired": false, "tier": "初級", "example": "5×6÷(1+2)", "integerExample": "5×6÷(1+2)", "weight": 24}, {"digits": [1, 2, 5, 7], "solvable": true, "nSolutions": 56, "fractionRequired": false, "tier": "入門", "example": "5+7-1×2", "integerExample": "5+7-1×2", "weight": 24}, {"digits": [1, 2, 5, 8], "solvable": true, "nSolutions": 39, "fractionRequired": false, "tier": "初級", "example": "5+8-(1+2)", "integerExample": "5+8-(1+2)", "weight": 24}, {"digits": [1, 2, 5, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "2×(9+1-5)", "integerExample": "2×(9+1-5)", "weight": 24}, {"digits": [1, 2, 6, 6], "solvable": true, "nSolutions": 29, "fractionRequired": false, "tier": "初級", "example": "6+6-1×2", "integerExample": "6+6-1×2", "weight": 12}, {"digits": [1, 2, 6, 7], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "6+7-(1+2)", "integerExample": "6+7-(1+2)", "weight": 24}, {"digits": [1, 2, 6, 8], "solvable": true, "nSolutions": 29, "fractionRequired": false, "tier": "初級", "example": "6×(1+2)-8", "integerExample": "6×(1+2)-8", "weight": 24}, {"digits": [1, 2, 6, 9], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "6-(1-9)÷2", "integerExample": "6-(1-9)÷2", "weight": 24}, {"digits": [1, 2, 7, 7], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "7-(1-7)÷2", "integerExample": "7-(1-7)÷2", "weight": 12}, {"digits": [1, 2, 7, 8], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "1-7+2×8", "integerExample": "1-7+2×8", "weight": 24}, {"digits": [1, 2, 7, 9], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "7+9÷(1+2)", "integerExample": "7+9÷(1+2)", "weight": 24}, {"digits": [1, 2, 8, 8], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "2×(1+8)-8", "integerExample": "2×(1+8)-8", "weight": 12}, {"digits": [1, 2, 8, 9], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "9×1×2-8", "integerExample": "9×1×2-8", "weight": 24}, {"digits": [1, 2, 9, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "1-9+2×9", "integerExample": "1-9+2×9", "weight": 12}, {"digits": [1, 3, 3, 3], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "1+3+3+3", "integerExample": "1+3+3+3", "weight": 4}, {"digits": [1, 3, 3, 4], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "1-3+3×4", "integerExample": "1-3+3×4", "weight": 12}, {"digits": [1, 3, 3, 5], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "3+5-(1-3)", "integerExample": "3+5-(1-3)", "weight": 12}, {"digits": [1, 3, 3, 6], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "1-3×(3-6)", "integerExample": "1-3×(3-6)", "weight": 12}, {"digits": [1, 3, 3, 7], "solvable": true, "nSolutions": 1, "fractionRequired": true, "tier": "名人", "example": "3×(1+7÷3)", "integerExample": null, "weight": 12}, {"digits": [1, 3, 3, 8], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "(1-3)×(3-8)", "integerExample": "(1-3)×(3-8)", "weight": 12}, {"digits": [1, 3, 3, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "1+3-(3-9)", "integerExample": "1+3-(3-9)", "weight": 12}, {"digits": [1, 3, 4, 4], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "4+4-(1-3)", "integerExample": "4+4-(1-3)", "weight": 12}, {"digits": [1, 3, 4, 5], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "5×(4+1-3)", "integerExample": "5×(4+1-3)", "weight": 24}, {"digits": [1, 3, 4, 6], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "4×(1+3)-6", "integerExample": "4×(1+3)-6", "weight": 24}, {"digits": [1, 3, 4, 7], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "7×(3-1)-4", "integerExample": "7×(3-1)-4", "weight": 24}, {"digits": [1, 3, 4, 8], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "1-3+4+8", "integerExample": "1-3+4+8", "weight": 24}, {"digits": [1, 3, 4, 9], "solvable": true, "nSolutions": 66, "fractionRequired": false, "tier": "入門", "example": "9+4÷(1+3)", "integerExample": "9+4÷(1+3)", "weight": 24}, {"digits": [1, 3, 5, 5], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "5×(5-1×3)", "integerExample": "5×(5-1×3)", "weight": 12}, {"digits": [1, 3, 5, 6], "solvable": true, "nSolutions": 70, "fractionRequired": false, "tier": "入門", "example": "5×(6-(1+3))", "integerExample": "5×(6-(1+3))", "weight": 24}, {"digits": [1, 3, 5, 7], "solvable": true, "nSolutions": 30, "fractionRequired": false, "tier": "初級", "example": "1-3+5+7", "integerExample": "1-3+5+7", "weight": 24}, {"digits": [1, 3, 5, 8], "solvable": true, "nSolutions": 59, "fractionRequired": false, "tier": "入門", "example": "5×8÷(1+3)", "integerExample": "5×8÷(1+3)", "weight": 24}, {"digits": [1, 3, 5, 9], "solvable": true, "nSolutions": 34, "fractionRequired": false, "tier": "初級", "example": "5+9-(1+3)", "integerExample": "5+9-(1+3)", "weight": 24}, {"digits": [1, 3, 6, 6], "solvable": true, "nSolutions": 20, "fractionRequired": false, "tier": "初級", "example": "1-3+6+6", "integerExample": "1-3+6+6", "weight": 12}, {"digits": [1, 3, 6, 7], "solvable": true, "nSolutions": 56, "fractionRequired": false, "tier": "入門", "example": "7-6÷(1-3)", "integerExample": "7-6÷(1-3)", "weight": 24}, {"digits": [1, 3, 6, 8], "solvable": true, "nSolutions": 59, "fractionRequired": false, "tier": "入門", "example": "6+8-(1+3)", "integerExample": "6+8-(1+3)", "weight": 24}, {"digits": [1, 3, 6, 9], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "1+6+9÷3", "integerExample": "1+6+9÷3", "weight": 24}, {"digits": [1, 3, 7, 7], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "7+7-(1+3)", "integerExample": "7+7-(1+3)", "weight": 12}, {"digits": [1, 3, 7, 8], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "8-(1-7)÷3", "integerExample": "8-(1-7)÷3", "weight": 24}, {"digits": [1, 3, 7, 9], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "7+9÷(1×3)", "integerExample": "7+9÷(1×3)", "weight": 24}, {"digits": [1, 3, 8, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "8+8÷(1+3)", "integerExample": "8+8÷(1+3)", "weight": 12}, {"digits": [1, 3, 8, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "9÷3-(1-8)", "integerExample": "9÷3-(1-8)", "weight": 24}, {"digits": [1, 3, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 4, 4, 4], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [1, 4, 4, 5], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "4×4-(1+5)", "integerExample": "4×4-(1+5)", "weight": 12}, {"digits": [1, 4, 4, 6], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "(1+4)×(6-4)", "integerExample": "(1+4)×(6-4)", "weight": 12}, {"digits": [1, 4, 4, 7], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "1-7+4×4", "integerExample": "1-7+4×4", "weight": 12}, {"digits": [1, 4, 4, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "(1+4)÷(4÷8)", "integerExample": "(1+4)×8÷4", "weight": 12}, {"digits": [1, 4, 4, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "1+4-(4-9)", "integerExample": "1+4-(4-9)", "weight": 12}, {"digits": [1, 4, 5, 5], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "5×(5+1-4)", "integerExample": "5×(5+1-4)", "weight": 12}, {"digits": [1, 4, 5, 6], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "5×(6-1×4)", "integerExample": "5×(6-1×4)", "weight": 24}, {"digits": [1, 4, 5, 7], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "(1+4)×(7-5)", "integerExample": "(1+4)×(7-5)", "weight": 24}, {"digits": [1, 4, 5, 8], "solvable": true, "nSolutions": 84, "fractionRequired": false, "tier": "入門", "example": "1-4+5+8", "integerExample": "1-4+5+8", "weight": 24}, {"digits": [1, 4, 5, 9], "solvable": true, "nSolutions": 72, "fractionRequired": false, "tier": "入門", "example": "9+5÷(1+4)", "integerExample": "9+5÷(1+4)", "weight": 24}, {"digits": [1, 4, 6, 6], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "(1-6)×(4-6)", "integerExample": "(1-6)×(4-6)", "weight": 12}, {"digits": [1, 4, 6, 7], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "1-4+6+7", "integerExample": "1-4+6+7", "weight": 24}, {"digits": [1, 4, 6, 8], "solvable": true, "nSolutions": 59, "fractionRequired": false, "tier": "入門", "example": "(1+4)×(8-6)", "integerExample": "(1+4)×(8-6)", "weight": 24}, {"digits": [1, 4, 6, 9], "solvable": true, "nSolutions": 34, "fractionRequired": false, "tier": "初級", "example": "6+9-(1+4)", "integerExample": "6+9-(1+4)", "weight": 24}, {"digits": [1, 4, 7, 7], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "7+7-1×4", "integerExample": "7+7-1×4", "weight": 12}, {"digits": [1, 4, 7, 8], "solvable": true, "nSolutions": 35, "fractionRequired": false, "tier": "初級", "example": "7+8-(1+4)", "integerExample": "7+8-(1+4)", "weight": 24}, {"digits": [1, 4, 7, 9], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "(1+4)×(9-7)", "integerExample": "(1+4)×(9-7)", "weight": 24}, {"digits": [1, 4, 8, 8], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "8+8÷(1×4)", "integerExample": "8+8÷(1×4)", "weight": 12}, {"digits": [1, 4, 8, 9], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "8÷4-(1-9)", "integerExample": "8÷4-(1-9)", "weight": 24}, {"digits": [1, 4, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 5, 5, 5], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×(1+5÷5)", "integerExample": "5×(1+5÷5)", "weight": 4}, {"digits": [1, 5, 5, 6], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "5×(6+1-5)", "integerExample": "5×(6+1-5)", "weight": 12}, {"digits": [1, 5, 5, 7], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "1×5×(7-5)", "integerExample": "1×5×(7-5)", "weight": 12}, {"digits": [1, 5, 5, 8], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "5×(8-(1+5))", "integerExample": "5×(8-(1+5))", "weight": 12}, {"digits": [1, 5, 5, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "1+5-(5-9)", "integerExample": "1+5-(5-9)", "weight": 12}, {"digits": [1, 5, 6, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×(1+6÷6)", "integerExample": "5×(1+6÷6)", "weight": 12}, {"digits": [1, 5, 6, 7], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "(1-6)×(5-7)", "integerExample": "(1-6)×(5-7)", "weight": 24}, {"digits": [1, 5, 6, 8], "solvable": true, "nSolutions": 36, "fractionRequired": false, "tier": "初級", "example": "1-5+6+8", "integerExample": "1-5+6+8", "weight": 24}, {"digits": [1, 5, 6, 9], "solvable": true, "nSolutions": 68, "fractionRequired": false, "tier": "入門", "example": "9+6÷(1+5)", "integerExample": "9+6÷(1+5)", "weight": 24}, {"digits": [1, 5, 7, 7], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "1-5+7+7", "integerExample": "1-5+7+7", "weight": 12}, {"digits": [1, 5, 7, 8], "solvable": true, "nSolutions": 55, "fractionRequired": false, "tier": "入門", "example": "7+8-1×5", "integerExample": "7+8-1×5", "weight": 24}, {"digits": [1, 5, 7, 9], "solvable": true, "nSolutions": 43, "fractionRequired": false, "tier": "入門", "example": "7+9-(1+5)", "integerExample": "7+9-(1+5)", "weight": 24}, {"digits": [1, 5, 8, 8], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "8+8-(1+5)", "integerExample": "8+8-(1+5)", "weight": 12}, {"digits": [1, 5, 8, 9], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "5×(9+1-8)", "integerExample": "5×(9+1-8)", "weight": 24}, {"digits": [1, 5, 9, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×(1+9÷9)", "integerExample": "5×(1+9÷9)", "weight": 12}, {"digits": [1, 6, 6, 6], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [1, 6, 6, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 6, 6, 8], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "(1-6)×(6-8)", "integerExample": "(1-6)×(6-8)", "weight": 12}, {"digits": [1, 6, 6, 9], "solvable": true, "nSolutions": 48, "fractionRequired": false, "tier": "入門", "example": "1+6-(6-9)", "integerExample": "1+6-(6-9)", "weight": 12}, {"digits": [1, 6, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 6, 7, 8], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "1-6+7+8", "integerExample": "1-6+7+8", "weight": 24}, {"digits": [1, 6, 7, 9], "solvable": true, "nSolutions": 66, "fractionRequired": false, "tier": "入門", "example": "9+7÷(1+6)", "integerExample": "9+7÷(1+6)", "weight": 24}, {"digits": [1, 6, 8, 8], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "8+8-1×6", "integerExample": "8+8-1×6", "weight": 12}, {"digits": [1, 6, 8, 9], "solvable": true, "nSolutions": 33, "fractionRequired": false, "tier": "初級", "example": "8+9-(1+6)", "integerExample": "8+9-(1+6)", "weight": 24}, {"digits": [1, 6, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [1, 7, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [1, 7, 7, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "1+8+7÷7", "integerExample": "1+8+7÷7", "weight": 12}, {"digits": [1, 7, 7, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "1+7-(7-9)", "integerExample": "1+7-(7-9)", "weight": 12}, {"digits": [1, 7, 8, 8], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "1-7+8+8", "integerExample": "1-7+8+8", "weight": 12}, {"digits": [1, 7, 8, 9], "solvable": true, "nSolutions": 64, "fractionRequired": false, "tier": "入門", "example": "9+8÷(1+7)", "integerExample": "9+8÷(1+7)", "weight": 24}, {"digits": [1, 7, 9, 9], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "9+9-(1+7)", "integerExample": "9+9-(1+7)", "weight": 12}, {"digits": [1, 8, 8, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "1+8+8÷8", "integerExample": "1+8+8÷8", "weight": 4}, {"digits": [1, 8, 8, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "1+8-(8-9)", "integerExample": "1+8-(8-9)", "weight": 12}, {"digits": [1, 8, 9, 9], "solvable": true, "nSolutions": 44, "fractionRequired": false, "tier": "入門", "example": "1+8+9÷9", "integerExample": "1+8+9÷9", "weight": 12}, {"digits": [1, 9, 9, 9], "solvable": true, "nSolutions": 35, "fractionRequired": false, "tier": "初級", "example": "1+9+9-9", "integerExample": "1+9+9-9", "weight": 4}, {"digits": [2, 2, 2, 2], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "2+2×(2+2)", "integerExample": "2+2×(2+2)", "weight": 1}, {"digits": [2, 2, 2, 3], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "2+2+2×3", "integerExample": "2+2+2×3", "weight": 4}, {"digits": [2, 2, 2, 4], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "2+2+2+4", "integerExample": "2+2+2+4", "weight": 4}, {"digits": [2, 2, 2, 5], "solvable": true, "nSolutions": 34, "fractionRequired": false, "tier": "初級", "example": "(2+2)÷(2÷5)", "integerExample": "5×(2+2)÷2", "weight": 4}, {"digits": [2, 2, 2, 6], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "2×(6-2÷2)", "integerExample": "2×(6-2÷2)", "weight": 4}, {"digits": [2, 2, 2, 7], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "2×7-(2+2)", "integerExample": "2×7-(2+2)", "weight": 4}, {"digits": [2, 2, 2, 8], "solvable": true, "nSolutions": 35, "fractionRequired": false, "tier": "初級", "example": "2+2-(2-8)", "integerExample": "2+2-(2-8)", "weight": 4}, {"digits": [2, 2, 2, 9], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "2×(9-(2+2))", "integerExample": "2×(9-(2+2))", "weight": 4}, {"digits": [2, 2, 3, 3], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "2+2+3+3", "integerExample": "2+2+3+3", "weight": 6}, {"digits": [2, 2, 3, 4], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "(2+3)÷(2÷4)", "integerExample": "(2+3)×(4-2)", "weight": 12}, {"digits": [2, 2, 3, 5], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "5×(3-2÷2)", "integerExample": "5×(3-2÷2)", "weight": 12}, {"digits": [2, 2, 3, 6], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "2÷2+3+6", "integerExample": "2÷2+3+6", "weight": 12}, {"digits": [2, 2, 3, 7], "solvable": true, "nSolutions": 42, "fractionRequired": false, "tier": "入門", "example": "2-2+3+7", "integerExample": "2-2+3+7", "weight": 12}, {"digits": [2, 2, 3, 8], "solvable": true, "nSolutions": 22, "fractionRequired": false, "tier": "初級", "example": "3+8-2÷2", "integerExample": "3+8-2÷2", "weight": 12}, {"digits": [2, 2, 3, 9], "solvable": true, "nSolutions": 22, "fractionRequired": false, "tier": "初級", "example": "2+2-(3-9)", "integerExample": "2+2-(3-9)", "weight": 12}, {"digits": [2, 2, 4, 4], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "2×4-(2-4)", "integerExample": "2×4-(2-4)", "weight": 6}, {"digits": [2, 2, 4, 5], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "2÷2+4+5", "integerExample": "2÷2+4+5", "weight": 12}, {"digits": [2, 2, 4, 6], "solvable": true, "nSolutions": 57, "fractionRequired": false, "tier": "入門", "example": "4×(2+2)-6", "integerExample": "4×(2+2)-6", "weight": 12}, {"digits": [2, 2, 4, 7], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "4+7-2÷2", "integerExample": "4+7-2÷2", "weight": 12}, {"digits": [2, 2, 4, 8], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "2×8-(2+4)", "integerExample": "2×8-(2+4)", "weight": 12}, {"digits": [2, 2, 4, 9], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "9+4÷(2+2)", "integerExample": "9+4÷(2+2)", "weight": 12}, {"digits": [2, 2, 5, 5], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "2-2+5+5", "integerExample": "2-2+5+5", "weight": 6}, {"digits": [2, 2, 5, 6], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "5×(6-(2+2))", "integerExample": "5×(6-(2+2))", "weight": 12}, {"digits": [2, 2, 5, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [2, 2, 5, 8], "solvable": true, "nSolutions": 31, "fractionRequired": false, "tier": "初級", "example": "5×8÷(2+2)", "integerExample": "5×8÷(2+2)", "weight": 12}, {"digits": [2, 2, 5, 9], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "5+9-(2+2)", "integerExample": "5+9-(2+2)", "weight": 12}, {"digits": [2, 2, 6, 6], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "2×(2+6)-6", "integerExample": "2×(2+6)-6", "weight": 6}, {"digits": [2, 2, 6, 7], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "2-6+2×7", "integerExample": "2-6+2×7", "weight": 12}, {"digits": [2, 2, 6, 8], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "6+8-(2+2)", "integerExample": "6+8-(2+2)", "weight": 12}, {"digits": [2, 2, 6, 9], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "2×9-(2+6)", "integerExample": "2×9-(2+6)", "weight": 12}, {"digits": [2, 2, 7, 7], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "7+7-(2+2)", "integerExample": "7+7-(2+2)", "weight": 6}, {"digits": [2, 2, 7, 8], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "2×(2+7)-8", "integerExample": "2×(2+7)-8", "weight": 12}, {"digits": [2, 2, 7, 9], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "2×(2×7-9)", "integerExample": "2×(2×7-9)", "weight": 12}, {"digits": [2, 2, 8, 8], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "8+8÷(2+2)", "integerExample": "8+8÷(2+2)", "weight": 6}, {"digits": [2, 2, 8, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "2×(9-8÷2)", "integerExample": "2×(9-8÷2)", "weight": 12}, {"digits": [2, 2, 9, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(9+2+9)÷2", "integerExample": "(9+2+9)÷2", "weight": 6}, {"digits": [2, 3, 3, 3], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "3×3-(2-3)", "integerExample": "3×3-(2-3)", "weight": 4}, {"digits": [2, 3, 3, 4], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "3×(4-2÷3)", "integerExample": "2×(3×3-4)", "weight": 12}, {"digits": [2, 3, 3, 5], "solvable": true, "nSolutions": 45, "fractionRequired": false, "tier": "入門", "example": "3×5-(2+3)", "integerExample": "3×5-(2+3)", "weight": 12}, {"digits": [2, 3, 3, 6], "solvable": true, "nSolutions": 23, "fractionRequired": false, "tier": "初級", "example": "(2+3)÷(3÷6)", "integerExample": "(2+3)×6÷3", "weight": 12}, {"digits": [2, 3, 3, 7], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "7-3×(2-3)", "integerExample": "7-3×(2-3)", "weight": 12}, {"digits": [2, 3, 3, 8], "solvable": true, "nSolutions": 44, "fractionRequired": false, "tier": "入門", "example": "2+3-(3-8)", "integerExample": "2+3-(3-8)", "weight": 12}, {"digits": [2, 3, 3, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "2+9-3÷3", "integerExample": "2+9-3÷3", "weight": 12}, {"digits": [2, 3, 4, 4], "solvable": true, "nSolutions": 20, "fractionRequired": false, "tier": "初級", "example": "4×4-2×3", "integerExample": "4×4-2×3", "weight": 12}, {"digits": [2, 3, 4, 5], "solvable": true, "nSolutions": 45, "fractionRequired": false, "tier": "入門", "example": "4+5-(2-3)", "integerExample": "4+5-(2-3)", "weight": 24}, {"digits": [2, 3, 4, 6], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "(2+3)×(6-4)", "integerExample": "(2+3)×(6-4)", "weight": 24}, {"digits": [2, 3, 4, 7], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "2-3+4+7", "integerExample": "2-3+4+7", "weight": 24}, {"digits": [2, 3, 4, 8], "solvable": true, "nSolutions": 35, "fractionRequired": false, "tier": "初級", "example": "(2+3)÷(4÷8)", "integerExample": "(2+3)×8÷4", "weight": 24}, {"digits": [2, 3, 4, 9], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "2+3-(4-9)", "integerExample": "2+3-(4-9)", "weight": 24}, {"digits": [2, 3, 5, 5], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "5-5×(2-3)", "integerExample": "5-5×(2-3)", "weight": 12}, {"digits": [2, 3, 5, 6], "solvable": true, "nSolutions": 35, "fractionRequired": false, "tier": "初級", "example": "2-3+5+6", "integerExample": "2-3+5+6", "weight": 24}, {"digits": [2, 3, 5, 7], "solvable": true, "nSolutions": 24, "fractionRequired": false, "tier": "初級", "example": "(2+3)×(7-5)", "integerExample": "(2+3)×(7-5)", "weight": 24}, {"digits": [2, 3, 5, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "5×(8-2×3)", "integerExample": "5×(8-2×3)", "weight": 24}, {"digits": [2, 3, 5, 9], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "9+5÷(2+3)", "integerExample": "9+5÷(2+3)", "weight": 24}, {"digits": [2, 3, 6, 6], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "6+6×2÷3", "integerExample": "3×6-(2+6)", "weight": 12}, {"digits": [2, 3, 6, 7], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "(7-2)÷(3÷6)", "integerExample": "6÷3×(7-2)", "weight": 24}, {"digits": [2, 3, 6, 8], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "(2+3)×(8-6)", "integerExample": "(2+3)×(8-6)", "weight": 24}, {"digits": [2, 3, 6, 9], "solvable": true, "nSolutions": 47, "fractionRequired": false, "tier": "入門", "example": "6+9-(2+3)", "integerExample": "6+9-(2+3)", "weight": 24}, {"digits": [2, 3, 7, 7], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "7+(2+7)÷3", "integerExample": "7+(2+7)÷3", "weight": 12}, {"digits": [2, 3, 7, 8], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "7+8-(2+3)", "integerExample": "7+8-(2+3)", "weight": 24}, {"digits": [2, 3, 7, 9], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "(2+3)×(9-7)", "integerExample": "(2+3)×(9-7)", "weight": 24}, {"digits": [2, 3, 8, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "8+8-2×3", "integerExample": "8+8-2×3", "weight": 12}, {"digits": [2, 3, 8, 9], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "2×8+3-9", "integerExample": "2×8+3-9", "weight": 24}, {"digits": [2, 3, 9, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "9÷3-(2-9)", "integerExample": "9÷3-(2-9)", "weight": 12}, {"digits": [2, 4, 4, 4], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "4×4-(2+4)", "integerExample": "4×4-(2+4)", "weight": 4}, {"digits": [2, 4, 4, 5], "solvable": true, "nSolutions": 46, "fractionRequired": false, "tier": "入門", "example": "5×(2+4-4)", "integerExample": "5×(2+4-4)", "weight": 12}, {"digits": [2, 4, 4, 6], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "2×4-(4-6)", "integerExample": "2×4-(4-6)", "weight": 12}, {"digits": [2, 4, 4, 7], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "7÷(2÷4)-4", "integerExample": "2+7+4÷4", "weight": 12}, {"digits": [2, 4, 4, 8], "solvable": true, "nSolutions": 55, "fractionRequired": false, "tier": "入門", "example": "2+4-(4-8)", "integerExample": "2+4-(4-8)", "weight": 12}, {"digits": [2, 4, 4, 9], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "(2-4)×(4-9)", "integerExample": "(2-4)×(4-9)", "weight": 12}, {"digits": [2, 4, 5, 5], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "4×5-2×5", "integerExample": "4×5-2×5", "weight": 12}, {"digits": [2, 4, 5, 6], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "5×(2×4-6)", "integerExample": "5×(2×4-6)", "weight": 24}, {"digits": [2, 4, 5, 7], "solvable": true, "nSolutions": 39, "fractionRequired": false, "tier": "初級", "example": "2-4+5+7", "integerExample": "2-4+5+7", "weight": 24}, {"digits": [2, 4, 5, 8], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "5×(8-(2+4))", "integerExample": "5×(8-(2+4))", "weight": 24}, {"digits": [2, 4, 5, 9], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "2+4-(5-9)", "integerExample": "2+4-(5-9)", "weight": 24}, {"digits": [2, 4, 6, 6], "solvable": true, "nSolutions": 29, "fractionRequired": false, "tier": "初級", "example": "2-4+6+6", "integerExample": "2-4+6+6", "weight": 12}, {"digits": [2, 4, 6, 7], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "7-6÷(2-4)", "integerExample": "7-6÷(2-4)", "weight": 24}, {"digits": [2, 4, 6, 8], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "6-8÷(2-4)", "integerExample": "6-8÷(2-4)", "weight": 24}, {"digits": [2, 4, 6, 9], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "9+6÷(2+4)", "integerExample": "9+6÷(2+4)", "weight": 24}, {"digits": [2, 4, 7, 7], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "7×(2-4÷7)", "integerExample": "2×(4+7÷7)", "weight": 12}, {"digits": [2, 4, 7, 8], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "2×7+4-8", "integerExample": "2×7+4-8", "weight": 24}, {"digits": [2, 4, 7, 9], "solvable": true, "nSolutions": 43, "fractionRequired": false, "tier": "入門", "example": "7+9-(2+4)", "integerExample": "7+9-(2+4)", "weight": 24}, {"digits": [2, 4, 8, 8], "solvable": true, "nSolutions": 22, "fractionRequired": false, "tier": "初級", "example": "8+8-(2+4)", "integerExample": "8+8-(2+4)", "weight": 12}, {"digits": [2, 4, 8, 9], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "9+8÷(2×4)", "integerExample": "9+8÷(2×4)", "weight": 24}, {"digits": [2, 4, 9, 9], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "9+9-2×4", "integerExample": "9+9-2×4", "weight": 12}, {"digits": [2, 5, 5, 5], "solvable": true, "nSolutions": 31, "fractionRequired": false, "tier": "初級", "example": "5×(2+5-5)", "integerExample": "5×(2+5-5)", "weight": 4}, {"digits": [2, 5, 5, 6], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "2×5×(6-5)", "integerExample": "2×5×(6-5)", "weight": 12}, {"digits": [2, 5, 5, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "2+7+5÷5", "integerExample": "2+7+5÷5", "weight": 12}, {"digits": [2, 5, 5, 8], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "2+5-(5-8)", "integerExample": "2+5-(5-8)", "weight": 12}, {"digits": [2, 5, 5, 9], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "5×(9-(2+5))", "integerExample": "5×(9-(2+5))", "weight": 12}, {"digits": [2, 5, 6, 6], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "2×5+6-6", "integerExample": "2×5+6-6", "weight": 12}, {"digits": [2, 5, 6, 7], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "2-5+6+7", "integerExample": "2-5+6+7", "weight": 24}, {"digits": [2, 5, 6, 8], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "8-6÷(2-5)", "integerExample": "8-6÷(2-5)", "weight": 24}, {"digits": [2, 5, 6, 9], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "2+5-(6-9)", "integerExample": "2+5-(6-9)", "weight": 24}, {"digits": [2, 5, 7, 7], "solvable": true, "nSolutions": 42, "fractionRequired": false, "tier": "入門", "example": "2×5+7-7", "integerExample": "2×5+7-7", "weight": 12}, {"digits": [2, 5, 7, 8], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "2×5×(8-7)", "integerExample": "2×5×(8-7)", "weight": 24}, {"digits": [2, 5, 7, 9], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "9+7÷(2+5)", "integerExample": "9+7÷(2+5)", "weight": 24}, {"digits": [2, 5, 8, 8], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "2×5+8-8", "integerExample": "2×5+8-8", "weight": 12}, {"digits": [2, 5, 8, 9], "solvable": true, "nSolutions": 46, "fractionRequired": false, "tier": "入門", "example": "8+9-(2+5)", "integerExample": "8+9-(2+5)", "weight": 24}, {"digits": [2, 5, 9, 9], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "2×5+9-9", "integerExample": "2×5+9-9", "weight": 12}, {"digits": [2, 6, 6, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "2×(6-6÷6)", "integerExample": "2×(6-6÷6)", "weight": 4}, {"digits": [2, 6, 6, 7], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "2+7+6÷6", "integerExample": "2+7+6÷6", "weight": 12}, {"digits": [2, 6, 6, 8], "solvable": true, "nSolutions": 52, "fractionRequired": false, "tier": "入門", "example": "2+6-(6-8)", "integerExample": "2+6-(6-8)", "weight": 12}, {"digits": [2, 6, 6, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "2+9-6÷6", "integerExample": "2+9-6÷6", "weight": 12}, {"digits": [2, 6, 7, 7], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "2-6+7+7", "integerExample": "2-6+7+7", "weight": 12}, {"digits": [2, 6, 7, 8], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "(2-7)×(6-8)", "integerExample": "(2-7)×(6-8)", "weight": 24}, {"digits": [2, 6, 7, 9], "solvable": true, "nSolutions": 38, "fractionRequired": false, "tier": "初級", "example": "2+6-(7-9)", "integerExample": "2+6-(7-9)", "weight": 24}, {"digits": [2, 6, 8, 8], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "8-8÷(2-6)", "integerExample": "8-8÷(2-6)", "weight": 12}, {"digits": [2, 6, 8, 9], "solvable": true, "nSolutions": 20, "fractionRequired": false, "tier": "初級", "example": "9+8÷(2+6)", "integerExample": "9+8÷(2+6)", "weight": 24}, {"digits": [2, 6, 9, 9], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "9+9-(2+6)", "integerExample": "9+9-(2+6)", "weight": 12}, {"digits": [2, 7, 7, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "2+7+7÷7", "integerExample": "2+7+7÷7", "weight": 4}, {"digits": [2, 7, 7, 8], "solvable": true, "nSolutions": 43, "fractionRequired": false, "tier": "入門", "example": "2+7-(7-8)", "integerExample": "2+7-(7-8)", "weight": 12}, {"digits": [2, 7, 7, 9], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "(2-7)×(7-9)", "integerExample": "(2-7)×(7-9)", "weight": 12}, {"digits": [2, 7, 8, 8], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "2+7+8÷8", "integerExample": "2+7+8÷8", "weight": 12}, {"digits": [2, 7, 8, 9], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "2+7-(8-9)", "integerExample": "2+7-(8-9)", "weight": 24}, {"digits": [2, 7, 9, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "2+7+9÷9", "integerExample": "2+7+9÷9", "weight": 12}, {"digits": [2, 8, 8, 8], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "2+8+8-8", "integerExample": "2+8+8-8", "weight": 4}, {"digits": [2, 8, 8, 9], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "(2+8)×(9-8)", "integerExample": "(2+8)×(9-8)", "weight": 12}, {"digits": [2, 8, 9, 9], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "2+8+9-9", "integerExample": "2+8+9-9", "weight": 12}, {"digits": [2, 9, 9, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "2+9-9÷9", "integerExample": "2+9-9÷9", "weight": 4}, {"digits": [3, 3, 3, 3], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "3×3+3÷3", "integerExample": "3×3+3÷3", "weight": 1}, {"digits": [3, 3, 3, 4], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "3×3-(3-4)", "integerExample": "3×3-(3-4)", "weight": 4}, {"digits": [3, 3, 3, 5], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "(3+3)÷(3÷5)", "integerExample": "5×(3+3)÷3", "weight": 4}, {"digits": [3, 3, 3, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "3÷3+3+6", "integerExample": "3÷3+3+6", "weight": 4}, {"digits": [3, 3, 3, 7], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "3+3-(3-7)", "integerExample": "3+3-(3-7)", "weight": 4}, {"digits": [3, 3, 3, 8], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "3×(3+3)-8", "integerExample": "3×(3+3)-8", "weight": 4}, {"digits": [3, 3, 3, 9], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "(3+3×9)÷3", "integerExample": "(3+3×9)÷3", "weight": 4}, {"digits": [3, 3, 4, 4], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "4×4-(3+3)", "integerExample": "4×4-(3+3)", "weight": 6}, {"digits": [3, 3, 4, 5], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "5×(3+3-4)", "integerExample": "5×(3+3-4)", "weight": 12}, {"digits": [3, 3, 4, 6], "solvable": true, "nSolutions": 43, "fractionRequired": false, "tier": "入門", "example": "3-3+4+6", "integerExample": "3-3+4+6", "weight": 12}, {"digits": [3, 3, 4, 7], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "4+7-3÷3", "integerExample": "4+7-3÷3", "weight": 12}, {"digits": [3, 3, 4, 8], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "3+3-(4-8)", "integerExample": "3+3-(4-8)", "weight": 12}, {"digits": [3, 3, 4, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "3+4+9÷3", "integerExample": "3+4+9÷3", "weight": 12}, {"digits": [3, 3, 5, 5], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "3-3+5+5", "integerExample": "3-3+5+5", "weight": 6}, {"digits": [3, 3, 5, 6], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "3×3-(5-6)", "integerExample": "3×3-(5-6)", "weight": 12}, {"digits": [3, 3, 5, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×(3×3-7)", "integerExample": "5×(3×3-7)", "weight": 12}, {"digits": [3, 3, 5, 8], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "5×(8-(3+3))", "integerExample": "5×(8-(3+3))", "weight": 12}, {"digits": [3, 3, 5, 9], "solvable": true, "nSolutions": 20, "fractionRequired": false, "tier": "初級", "example": "3+3-(5-9)", "integerExample": "3+3-(5-9)", "weight": 12}, {"digits": [3, 3, 6, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "3×3+6÷6", "integerExample": "3×3+6÷6", "weight": 6}, {"digits": [3, 3, 6, 7], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "3×3-(6-7)", "integerExample": "3×3-(6-7)", "weight": 12}, {"digits": [3, 3, 6, 8], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "(8-3)÷(3÷6)", "integerExample": "(6+3×8)÷3", "weight": 12}, {"digits": [3, 3, 6, 9], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "9+6÷(3+3)", "integerExample": "9+6÷(3+3)", "weight": 12}, {"digits": [3, 3, 7, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "3×3+7÷7", "integerExample": "3×3+7÷7", "weight": 6}, {"digits": [3, 3, 7, 8], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "3×3-(7-8)", "integerExample": "3×3-(7-8)", "weight": 12}, {"digits": [3, 3, 7, 9], "solvable": true, "nSolutions": 20, "fractionRequired": false, "tier": "初級", "example": "7+9-(3+3)", "integerExample": "7+9-(3+3)", "weight": 12}, {"digits": [3, 3, 8, 8], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "8+8-(3+3)", "integerExample": "8+8-(3+3)", "weight": 6}, {"digits": [3, 3, 8, 9], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "3×3-(8-9)", "integerExample": "3×3-(8-9)", "weight": 12}, {"digits": [3, 3, 9, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "3×3+9÷9", "integerExample": "3×3+9÷9", "weight": 6}, {"digits": [3, 4, 4, 4], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [3, 4, 4, 5], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "4+5-(3-4)", "integerExample": "4+5-(3-4)", "weight": 12}, {"digits": [3, 4, 4, 6], "solvable": true, "nSolutions": 22, "fractionRequired": false, "tier": "初級", "example": "6-4×(3-4)", "integerExample": "6-4×(3-4)", "weight": 12}, {"digits": [3, 4, 4, 7], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "3+4-(4-7)", "integerExample": "3+4-(4-7)", "weight": 12}, {"digits": [3, 4, 4, 8], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "3×4-8÷4", "integerExample": "3×4-8÷4", "weight": 12}, {"digits": [3, 4, 4, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "3-9+4×4", "integerExample": "3-9+4×4", "weight": 12}, {"digits": [3, 4, 5, 5], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "5×(3+4-5)", "integerExample": "5×(3+4-5)", "weight": 12}, {"digits": [3, 4, 5, 6], "solvable": true, "nSolutions": 51, "fractionRequired": false, "tier": "入門", "example": "3-4+5+6", "integerExample": "3-4+5+6", "weight": 24}, {"digits": [3, 4, 5, 7], "solvable": true, "nSolutions": 22, "fractionRequired": false, "tier": "初級", "example": "3×4+5-7", "integerExample": "3×4+5-7", "weight": 24}, {"digits": [3, 4, 5, 8], "solvable": true, "nSolutions": 29, "fractionRequired": false, "tier": "初級", "example": "3+4-(5-8)", "integerExample": "3+4-(5-8)", "weight": 24}, {"digits": [3, 4, 5, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "5×(9-(3+4))", "integerExample": "5×(9-(3+4))", "weight": 24}, {"digits": [3, 4, 6, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(6+4×6)÷3", "integerExample": "(6+4×6)÷3", "weight": 12}, {"digits": [3, 4, 6, 7], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "4×7-3×6", "integerExample": "4×7-3×6", "weight": 24}, {"digits": [3, 4, 6, 8], "solvable": true, "nSolutions": 20, "fractionRequired": false, "tier": "初級", "example": "3×4+6-8", "integerExample": "3×4+6-8", "weight": 24}, {"digits": [3, 4, 6, 9], "solvable": true, "nSolutions": 32, "fractionRequired": false, "tier": "初級", "example": "3+4-(6-9)", "integerExample": "3+4-(6-9)", "weight": 24}, {"digits": [3, 4, 7, 7], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "3×7-(4+7)", "integerExample": "3×7-(4+7)", "weight": 12}, {"digits": [3, 4, 7, 8], "solvable": true, "nSolutions": 1, "fractionRequired": true, "tier": "名人", "example": "8×(3-7÷4)", "integerExample": null, "weight": 24}, {"digits": [3, 4, 7, 9], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "9+7÷(3+4)", "integerExample": "9+7÷(3+4)", "weight": 24}, {"digits": [3, 4, 8, 8], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "(8-3)÷(4÷8)", "integerExample": "(8-3)×8÷4", "weight": 12}, {"digits": [3, 4, 8, 9], "solvable": true, "nSolutions": 38, "fractionRequired": false, "tier": "初級", "example": "8+9-(3+4)", "integerExample": "8+9-(3+4)", "weight": 24}, {"digits": [3, 4, 9, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "4+9-9÷3", "integerExample": "4+9-9÷3", "weight": 12}, {"digits": [3, 5, 5, 5], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "5×5-3×5", "integerExample": "5×5-3×5", "weight": 4}, {"digits": [3, 5, 5, 6], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "5×(3+5-6)", "integerExample": "5×(3+5-6)", "weight": 12}, {"digits": [3, 5, 5, 7], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "3+5-(5-7)", "integerExample": "3+5-(5-7)", "weight": 12}, {"digits": [3, 5, 5, 8], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "3+8-5÷5", "integerExample": "3+8-5÷5", "weight": 12}, {"digits": [3, 5, 5, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "9÷(3÷5)-5", "integerExample": "5×9÷3-5", "weight": 12}, {"digits": [3, 5, 6, 6], "solvable": true, "nSolutions": 21, "fractionRequired": false, "tier": "初級", "example": "3-5+6+6", "integerExample": "3-5+6+6", "weight": 12}, {"digits": [3, 5, 6, 7], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "7-6÷(3-5)", "integerExample": "7-6÷(3-5)", "weight": 24}, {"digits": [3, 5, 6, 8], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "3+5-(6-8)", "integerExample": "3+5-(6-8)", "weight": 24}, {"digits": [3, 5, 6, 9], "solvable": true, "nSolutions": 31, "fractionRequired": false, "tier": "初級", "example": "3×5×6÷9", "integerExample": "6×3×5÷9", "weight": 24}, {"digits": [3, 5, 7, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×(3-7÷7)", "integerExample": "5×(3-7÷7)", "weight": 12}, {"digits": [3, 5, 7, 8], "solvable": true, "nSolutions": 14, "fractionRequired": false, "tier": "中級", "example": "8+(3+7)÷5", "integerExample": "8+(3+7)÷5", "weight": 24}, {"digits": [3, 5, 7, 9], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "3+5-(7-9)", "integerExample": "3+5-(7-9)", "weight": 24}, {"digits": [3, 5, 8, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×(3-8÷8)", "integerExample": "5×(3-8÷8)", "weight": 12}, {"digits": [3, 5, 8, 9], "solvable": true, "nSolutions": 24, "fractionRequired": false, "tier": "初級", "example": "9+8÷(3+5)", "integerExample": "9+8÷(3+5)", "weight": 24}, {"digits": [3, 5, 9, 9], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "9+9-(3+5)", "integerExample": "9+9-(3+5)", "weight": 12}, {"digits": [3, 6, 6, 6], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "3+6+6÷6", "integerExample": "3+6+6÷6", "weight": 4}, {"digits": [3, 6, 6, 7], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "3+6-(6-7)", "integerExample": "3+6-(6-7)", "weight": 12}, {"digits": [3, 6, 6, 8], "solvable": true, "nSolutions": 19, "fractionRequired": false, "tier": "中級", "example": "8-6÷(3-6)", "integerExample": "8-6÷(3-6)", "weight": 12}, {"digits": [3, 6, 6, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [3, 6, 7, 7], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "3+6+7÷7", "integerExample": "3+6+7÷7", "weight": 12}, {"digits": [3, 6, 7, 8], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "3+6-(7-8)", "integerExample": "3+6-(7-8)", "weight": 24}, {"digits": [3, 6, 7, 9], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "7-9÷(3-6)", "integerExample": "7-9÷(3-6)", "weight": 24}, {"digits": [3, 6, 8, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "3+6+8÷8", "integerExample": "3+6+8÷8", "weight": 12}, {"digits": [3, 6, 8, 9], "solvable": true, "nSolutions": 36, "fractionRequired": false, "tier": "初級", "example": "3+6-(8-9)", "integerExample": "3+6-(8-9)", "weight": 24}, {"digits": [3, 6, 9, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "3+6+9÷9", "integerExample": "3+6+9÷9", "weight": 12}, {"digits": [3, 7, 7, 7], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "3+7+7-7", "integerExample": "3+7+7-7", "weight": 4}, {"digits": [3, 7, 7, 8], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "(3+7)×(8-7)", "integerExample": "(3+7)×(8-7)", "weight": 12}, {"digits": [3, 7, 7, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [3, 7, 8, 8], "solvable": true, "nSolutions": 42, "fractionRequired": false, "tier": "入門", "example": "3+7+8-8", "integerExample": "3+7+8-8", "weight": 12}, {"digits": [3, 7, 8, 9], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "(3+7)×(9-8)", "integerExample": "(3+7)×(9-8)", "weight": 24}, {"digits": [3, 7, 9, 9], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "3+7+9-9", "integerExample": "3+7+9-9", "weight": 12}, {"digits": [3, 8, 8, 8], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "3+8-8÷8", "integerExample": "3+8-8÷8", "weight": 4}, {"digits": [3, 8, 8, 9], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "3+8+8-9", "integerExample": "3+8+8-9", "weight": 12}, {"digits": [3, 8, 9, 9], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "3+8-9÷9", "integerExample": "3+8-9÷9", "weight": 12}, {"digits": [3, 9, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [4, 4, 4, 4], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 1}, {"digits": [4, 4, 4, 5], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "(4+4)÷(4÷5)", "integerExample": "5×(4+4)÷4", "weight": 4}, {"digits": [4, 4, 4, 6], "solvable": true, "nSolutions": 29, "fractionRequired": false, "tier": "初級", "example": "4+4-(4-6)", "integerExample": "4+4-(4-6)", "weight": 4}, {"digits": [4, 4, 4, 7], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "4+7-4÷4", "integerExample": "4+7-4÷4", "weight": 4}, {"digits": [4, 4, 4, 8], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "4+4+8÷4", "integerExample": "4+4+8÷4", "weight": 4}, {"digits": [4, 4, 4, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(4+4×9)÷4", "integerExample": "(4+4×9)÷4", "weight": 4}, {"digits": [4, 4, 5, 5], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "4-4+5+5", "integerExample": "4-4+5+5", "weight": 6}, {"digits": [4, 4, 5, 6], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "5×(4+4-6)", "integerExample": "5×(4+4-6)", "weight": 12}, {"digits": [4, 4, 5, 7], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "4+4-(5-7)", "integerExample": "4+4-(5-7)", "weight": 12}, {"digits": [4, 4, 5, 8], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "4×4×5÷8", "integerExample": "5×4×4÷8", "weight": 12}, {"digits": [4, 4, 5, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [4, 4, 6, 6], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(4+6×6)÷4", "integerExample": "(4+6×6)÷4", "weight": 6}, {"digits": [4, 4, 6, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "7×(6-4)-4", "integerExample": "7×(6-4)-4", "weight": 12}, {"digits": [4, 4, 6, 8], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "4+4-(6-8)", "integerExample": "4+4-(6-8)", "weight": 12}, {"digits": [4, 4, 6, 9], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "(4-6)×(4-9)", "integerExample": "(4-6)×(4-9)", "weight": 12}, {"digits": [4, 4, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [4, 4, 7, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "8÷(4÷7)-4", "integerExample": "7+(4+8)÷4", "weight": 12}, {"digits": [4, 4, 7, 9], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "4+4-(7-9)", "integerExample": "4+4-(7-9)", "weight": 12}, {"digits": [4, 4, 8, 8], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "8+4×4÷8", "integerExample": "8+4×4÷8", "weight": 6}, {"digits": [4, 4, 8, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "9+8÷(4+4)", "integerExample": "9+8÷(4+4)", "weight": 12}, {"digits": [4, 4, 9, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "9+9-(4+4)", "integerExample": "9+9-(4+4)", "weight": 6}, {"digits": [4, 5, 5, 5], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "4+5+5÷5", "integerExample": "4+5+5÷5", "weight": 4}, {"digits": [4, 5, 5, 6], "solvable": true, "nSolutions": 41, "fractionRequired": false, "tier": "入門", "example": "4+5-(5-6)", "integerExample": "4+5-(5-6)", "weight": 12}, {"digits": [4, 5, 5, 7], "solvable": true, "nSolutions": 17, "fractionRequired": false, "tier": "中級", "example": "5×(4+5-7)", "integerExample": "5×(4+5-7)", "weight": 12}, {"digits": [4, 5, 5, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [4, 5, 5, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(5×9-5)÷4", "integerExample": "(5×9-5)÷4", "weight": 12}, {"digits": [4, 5, 6, 6], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "4+5+6÷6", "integerExample": "4+5+6÷6", "weight": 12}, {"digits": [4, 5, 6, 7], "solvable": true, "nSolutions": 30, "fractionRequired": false, "tier": "初級", "example": "4+5-(6-7)", "integerExample": "4+5-(6-7)", "weight": 24}, {"digits": [4, 5, 6, 8], "solvable": true, "nSolutions": 16, "fractionRequired": false, "tier": "中級", "example": "4×5÷(8-6)", "integerExample": "4×5÷(8-6)", "weight": 24}, {"digits": [4, 5, 6, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "4×6-(5+9)", "integerExample": "4×6-(5+9)", "weight": 24}, {"digits": [4, 5, 7, 7], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "4+5+7÷7", "integerExample": "4+5+7÷7", "weight": 12}, {"digits": [4, 5, 7, 8], "solvable": true, "nSolutions": 32, "fractionRequired": false, "tier": "初級", "example": "4+5-(7-8)", "integerExample": "4+5-(7-8)", "weight": 24}, {"digits": [4, 5, 7, 9], "solvable": true, "nSolutions": 12, "fractionRequired": false, "tier": "中級", "example": "4×5÷(9-7)", "integerExample": "4×5÷(9-7)", "weight": 24}, {"digits": [4, 5, 8, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "4+5+8÷8", "integerExample": "4+5+8÷8", "weight": 12}, {"digits": [4, 5, 8, 9], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "4+5-(8-9)", "integerExample": "4+5-(8-9)", "weight": 24}, {"digits": [4, 5, 9, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "4+5+9÷9", "integerExample": "4+5+9÷9", "weight": 12}, {"digits": [4, 6, 6, 6], "solvable": true, "nSolutions": 28, "fractionRequired": false, "tier": "初級", "example": "4+6+6-6", "integerExample": "4+6+6-6", "weight": 4}, {"digits": [4, 6, 6, 7], "solvable": true, "nSolutions": 18, "fractionRequired": false, "tier": "中級", "example": "(4+6)×(7-6)", "integerExample": "(4+6)×(7-6)", "weight": 12}, {"digits": [4, 6, 6, 8], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "6-8÷(4-6)", "integerExample": "6-8÷(4-6)", "weight": 12}, {"digits": [4, 6, 6, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "4÷6×(6+9)", "integerExample": "4×(6+9)÷6", "weight": 12}, {"digits": [4, 6, 7, 7], "solvable": true, "nSolutions": 42, "fractionRequired": false, "tier": "入門", "example": "4+6+7-7", "integerExample": "4+6+7-7", "weight": 12}, {"digits": [4, 6, 7, 8], "solvable": true, "nSolutions": 26, "fractionRequired": false, "tier": "初級", "example": "(4+6)×(8-7)", "integerExample": "(4+6)×(8-7)", "weight": 24}, {"digits": [4, 6, 7, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "6+(7+9)÷4", "integerExample": "6+(7+9)÷4", "weight": 24}, {"digits": [4, 6, 8, 8], "solvable": true, "nSolutions": 49, "fractionRequired": false, "tier": "入門", "example": "4+6+8-8", "integerExample": "4+6+8-8", "weight": 12}, {"digits": [4, 6, 8, 9], "solvable": true, "nSolutions": 13, "fractionRequired": false, "tier": "中級", "example": "(4+6)×(9-8)", "integerExample": "(4+6)×(9-8)", "weight": 24}, {"digits": [4, 6, 9, 9], "solvable": true, "nSolutions": 40, "fractionRequired": false, "tier": "入門", "example": "4+6+9-9", "integerExample": "4+6+9-9", "weight": 12}, {"digits": [4, 7, 7, 7], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "4+7-7÷7", "integerExample": "4+7-7÷7", "weight": 4}, {"digits": [4, 7, 7, 8], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "4+7+7-8", "integerExample": "4+7+7-8", "weight": 12}, {"digits": [4, 7, 7, 9], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "7-9÷(4-7)", "integerExample": "7-9÷(4-7)", "weight": 12}, {"digits": [4, 7, 8, 8], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "4+7-8÷8", "integerExample": "4+7-8÷8", "weight": 12}, {"digits": [4, 7, 8, 9], "solvable": true, "nSolutions": 27, "fractionRequired": false, "tier": "初級", "example": "4+7+8-9", "integerExample": "4+7+8-9", "weight": 24}, {"digits": [4, 7, 9, 9], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "4+7-9÷9", "integerExample": "4+7-9÷9", "weight": 12}, {"digits": [4, 8, 8, 8], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "8-8÷(4-8)", "integerExample": "8-8÷(4-8)", "weight": 4}, {"digits": [4, 8, 8, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "9÷(4÷8)-8", "integerExample": "9×8÷4-8", "weight": 12}, {"digits": [4, 8, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [4, 9, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [5, 5, 5, 5], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "5+5+5-5", "integerExample": "5+5+5-5", "weight": 1}, {"digits": [5, 5, 5, 6], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "(5+5)×(6-5)", "integerExample": "(5+5)×(6-5)", "weight": 4}, {"digits": [5, 5, 5, 7], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "5×7-5×5", "integerExample": "5×7-5×5", "weight": 4}, {"digits": [5, 5, 5, 8], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "8+(5+5)÷5", "integerExample": "8+(5+5)÷5", "weight": 4}, {"digits": [5, 5, 5, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(5+5×9)÷5", "integerExample": "(5+5×9)÷5", "weight": 4}, {"digits": [5, 5, 6, 6], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "5+5+6-6", "integerExample": "5+5+6-6", "weight": 6}, {"digits": [5, 5, 6, 7], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "(5+5)×(7-6)", "integerExample": "(5+5)×(7-6)", "weight": 12}, {"digits": [5, 5, 6, 8], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "5×8-5×6", "integerExample": "5×8-5×6", "weight": 12}, {"digits": [5, 5, 6, 9], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "5×5-(6+9)", "integerExample": "5×5-(6+9)", "weight": 12}, {"digits": [5, 5, 7, 7], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "5+5+7-7", "integerExample": "5+5+7-7", "weight": 6}, {"digits": [5, 5, 7, 8], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "(5+5)×(8-7)", "integerExample": "(5+5)×(8-7)", "weight": 12}, {"digits": [5, 5, 7, 9], "solvable": true, "nSolutions": 6, "fractionRequired": false, "tier": "上級", "example": "5×9-5×7", "integerExample": "5×9-5×7", "weight": 12}, {"digits": [5, 5, 8, 8], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "5+5+8-8", "integerExample": "5+5+8-8", "weight": 6}, {"digits": [5, 5, 8, 9], "solvable": true, "nSolutions": 11, "fractionRequired": false, "tier": "中級", "example": "(5+5)×(9-8)", "integerExample": "(5+5)×(9-8)", "weight": 12}, {"digits": [5, 5, 9, 9], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "5+5+9-9", "integerExample": "5+5+9-9", "weight": 6}, {"digits": [5, 6, 6, 6], "solvable": true, "nSolutions": 10, "fractionRequired": false, "tier": "中級", "example": "5+6-6÷6", "integerExample": "5+6-6÷6", "weight": 4}, {"digits": [5, 6, 6, 7], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "5+6+6-7", "integerExample": "5+6+6-7", "weight": 12}, {"digits": [5, 6, 6, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [5, 6, 6, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "5×6÷(9-6)", "integerExample": "5×6÷(9-6)", "weight": 12}, {"digits": [5, 6, 7, 7], "solvable": true, "nSolutions": 7, "fractionRequired": false, "tier": "上級", "example": "5+6-7÷7", "integerExample": "5+6-7÷7", "weight": 12}, {"digits": [5, 6, 7, 8], "solvable": true, "nSolutions": 36, "fractionRequired": false, "tier": "初級", "example": "5+6+7-8", "integerExample": "5+6+7-8", "weight": 24}, {"digits": [5, 6, 7, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "7+(6+9)÷5", "integerExample": "7+(6+9)÷5", "weight": 24}, {"digits": [5, 6, 8, 8], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "5+6-8÷8", "integerExample": "5+6-8÷8", "weight": 12}, {"digits": [5, 6, 8, 9], "solvable": true, "nSolutions": 25, "fractionRequired": false, "tier": "初級", "example": "5+6+8-9", "integerExample": "5+6+8-9", "weight": 24}, {"digits": [5, 6, 9, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "5+6-9÷9", "integerExample": "5+6-9÷9", "weight": 12}, {"digits": [5, 7, 7, 7], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "5÷7×(7+7)", "integerExample": "5×(7+7)÷7", "weight": 4}, {"digits": [5, 7, 7, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "7+(7+8)÷5", "integerExample": "7+(7+8)÷5", "weight": 12}, {"digits": [5, 7, 7, 9], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "5+7+7-9", "integerExample": "5+7+7-9", "weight": 12}, {"digits": [5, 7, 8, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [5, 7, 8, 9], "solvable": true, "nSolutions": 9, "fractionRequired": false, "tier": "上級", "example": "7-9÷(5-8)", "integerExample": "7-9÷(5-8)", "weight": 24}, {"digits": [5, 7, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [5, 8, 8, 8], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "5÷8×(8+8)", "integerExample": "5×(8+8)÷8", "weight": 4}, {"digits": [5, 8, 8, 9], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "8-8÷(5-9)", "integerExample": "8-8÷(5-9)", "weight": 12}, {"digits": [5, 8, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [5, 9, 9, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "5÷9×(9+9)", "integerExample": "5×(9+9)÷9", "weight": 4}, {"digits": [6, 6, 6, 6], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 1}, {"digits": [6, 6, 6, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [6, 6, 6, 8], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "6+6+6-8", "integerExample": "6+6+6-8", "weight": 4}, {"digits": [6, 6, 6, 9], "solvable": true, "nSolutions": 4, "fractionRequired": false, "tier": "達人", "example": "6+6×6÷9", "integerExample": "6+6×6÷9", "weight": 4}, {"digits": [6, 6, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [6, 6, 7, 8], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "7-6÷(6-8)", "integerExample": "7-6÷(6-8)", "weight": 12}, {"digits": [6, 6, 7, 9], "solvable": true, "nSolutions": 15, "fractionRequired": false, "tier": "中級", "example": "6+6+7-9", "integerExample": "6+6+7-9", "weight": 12}, {"digits": [6, 6, 8, 8], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "6-8÷(6-8)", "integerExample": "6-8÷(6-8)", "weight": 6}, {"digits": [6, 6, 8, 9], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "8-6÷(6-9)", "integerExample": "8-6÷(6-9)", "weight": 12}, {"digits": [6, 6, 9, 9], "solvable": true, "nSolutions": 5, "fractionRequired": false, "tier": "上級", "example": "(6+9)×6÷9", "integerExample": "6×(6+9)÷9", "weight": 6}, {"digits": [6, 7, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [6, 7, 7, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [6, 7, 7, 9], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "7-6÷(7-9)", "integerExample": "7-6÷(7-9)", "weight": 12}, {"digits": [6, 7, 8, 8], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "8+(6+8)÷7", "integerExample": "8+(6+8)÷7", "weight": 12}, {"digits": [6, 7, 8, 9], "solvable": true, "nSolutions": 8, "fractionRequired": false, "tier": "上級", "example": "6÷9×(7+8)", "integerExample": "6×(7+8)÷9", "weight": 24}, {"digits": [6, 7, 9, 9], "solvable": true, "nSolutions": 3, "fractionRequired": false, "tier": "達人", "example": "7-9÷(6-9)", "integerExample": "7-9÷(6-9)", "weight": 12}, {"digits": [6, 8, 8, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [6, 8, 8, 9], "solvable": true, "nSolutions": 2, "fractionRequired": false, "tier": "達人", "example": "8×8-6×9", "integerExample": "8×8-6×9", "weight": 12}, {"digits": [6, 8, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [6, 9, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [7, 7, 7, 7], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 1}, {"digits": [7, 7, 7, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "8+(7+7)÷7", "integerExample": "8+(7+7)÷7", "weight": 4}, {"digits": [7, 7, 7, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(7+7×9)÷7", "integerExample": "(7+7×9)÷7", "weight": 4}, {"digits": [7, 7, 8, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [7, 7, 8, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 12}, {"digits": [7, 7, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [7, 8, 8, 8], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [7, 8, 8, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "8+(7+9)÷8", "integerExample": "8+(7+9)÷8", "weight": 12}, {"digits": [7, 8, 9, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "9×(9-7)-8", "integerExample": "9×(9-7)-8", "weight": 12}, {"digits": [7, 9, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 4}, {"digits": [8, 8, 8, 8], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "8+(8+8)÷8", "integerExample": "8+(8+8)÷8", "weight": 1}, {"digits": [8, 8, 8, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(8+8×9)÷8", "integerExample": "(8+8×9)÷8", "weight": 4}, {"digits": [8, 8, 9, 9], "solvable": false, "nSolutions": 0, "fractionRequired": false, "tier": "作れない", "example": null, "integerExample": null, "weight": 6}, {"digits": [8, 9, 9, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "8+(9+9)÷9", "integerExample": "8+(9+9)÷9", "weight": 4}, {"digits": [9, 9, 9, 9], "solvable": true, "nSolutions": 1, "fractionRequired": false, "tier": "名人", "example": "(9+9×9)÷9", "integerExample": "(9+9×9)÷9", "weight": 1}]</script>
+<script>
+// ===== CORE_START =====
+// テンパズル v0.2 コアロジック（DOM非依存。tests/test_tenpuzzle_v02.js からも読み込む）
+var TP = (function () {
+  'use strict';
+
+  // ---------- 分数（整数ペア：約分済み・分母正） ----------
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+  function frac(n, d) {
+    if (d === undefined) d = 1;
+    if (!Number.isInteger(n) || !Number.isInteger(d)) throw new Error('frac: integers only');
+    if (d === 0) throw new Error('frac: zero denominator');
+    if (d < 0) { n = -n; d = -d; }
+    var g = gcd(n, d) || 1;
+    n = n / g; d = d / g;
+    if (n === 0) { n = 0; d = 1; } // -0 を除く
+    return { n: n, d: d };
+  }
+  function add(a, b) { return frac(a.n * b.d + b.n * a.d, a.d * b.d); }
+  function sub(a, b) { return frac(a.n * b.d - b.n * a.d, a.d * b.d); }
+  function mul(a, b) { return frac(a.n * b.n, a.d * b.d); }
+  function div(a, b) { if (b.n === 0) return null; return frac(a.n * b.d, a.d * b.n); }
+  var OPF = { '+': add, '-': sub, '*': mul, '/': div };
+  function apply(op, a, b) { return OPF[op](a, b); }
+  function isInt(f) { return f.d === 1; }
+  function eq(a, b) { return a.n === b.n && a.d === b.d; }
+  function fracStr(f) { return f.d === 1 ? String(f.n) : f.n + '/' + f.d; }
+  function approx(f) {
+    var s = (f.n / f.d).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+    return s;
+  }
+
+  // ---------- 式の木 ----------
+  // 葉: ['n', k]   節: [op, 左, 右]   op は '+','-','*','/'（solver-tenpuzzle.py と同じ形）
+  function leaf(k) { return ['n', k]; }
+  function node(op, a, b) { return [op, a, b]; }
+
+  // solver-tenpuzzle.py の canon / collect の移植（同一定義であること）
+  function canon(e) {
+    if (e[0] === 'n') return String(e[1]);
+    var op = e[0];
+    if (op === '+' || op === '*') {
+      var parts = [];
+      for (var i = 1; i < e.length; i++) {
+        var c = e[i];
+        if (c[0] === op) Array.prototype.push.apply(parts, collect(c, op));
+        else parts.push(canon(c));
+      }
+      parts.sort(); // Python の sorted(str) と同じ（ASCIIのみ）
+      return op + '(' + parts.join(',') + ')';
+    }
+    return op + '(' + canon(e[1]) + ',' + canon(e[2]) + ')';
+  }
+  function collect(e, op) {
+    var out = [];
+    for (var i = 1; i < e.length; i++) {
+      var c = e[i];
+      if (c[0] === op) Array.prototype.push.apply(out, collect(c, op));
+      else out.push(canon(c));
+    }
+    return out;
+  }
+
+  // solver-tenpuzzle.py の infix の移植（表記を pool の example と揃える）
+  var PREC = { '+': 1, '-': 1, '*': 2, '/': 2 };
+  var SYM = { '+': '+', '-': '-', '*': '×', '/': '÷' };
+  function infix(e, parentPrec, isRight, parentOp) {
+    if (parentPrec === undefined) parentPrec = 0;
+    if (parentOp === undefined) parentOp = '';
+    if (e[0] === 'n') return String(e[1]);
+    var op = e[0];
+    var s = infix(e[1], PREC[op], false, op) + SYM[op] + infix(e[2], PREC[op], true, op);
+    var need = PREC[op] < parentPrec || (isRight && (parentOp === '-' || parentOp === '/') && PREC[op] === parentPrec);
+    return need ? '(' + s + ')' : s;
+  }
+  // 表示用（マイナスを全角風の − に）
+  function pretty(s) { return String(s).replace(/-/g, '−'); }
+
+  // 式文字列 → 木（example のヒント生成とボット用）。通常の優先順位・左結合で読む
+  function parse(str) {
+    var toks = [], i = 0, s = String(str).replace(/\s+/g, '');
+    while (i < s.length) {
+      var ch = s[i];
+      if (/[0-9]/.test(ch)) { var j = i; while (j < s.length && /[0-9]/.test(s[j])) j++; toks.push(['n', parseInt(s.slice(i, j), 10)]); i = j; continue; }
+      var map = { '+': '+', '-': '-', '−': '-', '*': '*', '×': '*', '/': '/', '÷': '/' };
+      if (map[ch]) { toks.push(['op', map[ch]]); i++; continue; }
+      if (ch === '(' || ch === ')') { toks.push([ch]); i++; continue; }
+      throw new Error('parse: bad char ' + ch);
+    }
+    var p = 0;
+    function peek() { return toks[p]; }
+    function expr() {
+      var l = term();
+      while (peek() && peek()[0] === 'op' && (peek()[1] === '+' || peek()[1] === '-')) { var o = toks[p++][1]; l = node(o, l, term()); }
+      return l;
+    }
+    function term() {
+      var l = factor();
+      while (peek() && peek()[0] === 'op' && (peek()[1] === '*' || peek()[1] === '/')) { var o = toks[p++][1]; l = node(o, l, factor()); }
+      return l;
+    }
+    function factor() {
+      var t = toks[p++];
+      if (!t) throw new Error('parse: unexpected end');
+      if (t[0] === 'n') return leaf(t[1]);
+      if (t[0] === '(') { var e = expr(); if (!toks[p] || toks[p][0] !== ')') throw new Error('parse: missing )'); p++; return e; }
+      throw new Error('parse: unexpected token');
+    }
+    var e = expr();
+    if (p !== toks.length) throw new Error('parse: trailing tokens');
+    return e;
+  }
+
+  function evalTree(e) {
+    if (e[0] === 'n') return frac(e[1]);
+    var a = evalTree(e[1]), b = evalTree(e[2]);
+    var v = apply(e[0], a, b);
+    if (v === null) throw new Error('evalTree: division by zero');
+    return v;
+  }
+  function leaves(e) { return e[0] === 'n' ? [e[1]] : leaves(e[1]).concat(leaves(e[2])); }
+
+  // 「式の左から最初の候補」：左の部分木から順に見て、最初に出てくる「数字2つだけの演算」
+  function firstMerge(e) {
+    if (e[0] === 'n') return null;
+    if (e[1][0] === 'n' && e[2][0] === 'n') {
+      return { a: e[1][1], b: e[2][1], op: e[0], result: evalTree(e) };
+    }
+    return firstMerge(e[1]) || firstMerge(e[2]);
+  }
+
+  // 分数経由：途中（合体で生まれたカード）に非整数が1回でも出たか。solver の f フラグと同じ
+  function viaFraction(e) {
+    if (e[0] === 'n') return false;
+    return !isInt(evalTree(e)) || viaFraction(e[1]) || viaFraction(e[2]);
+  }
+  function opsUsed(e) { return e[0] === 'n' ? [] : [e[0]].concat(opsUsed(e[1]), opsUsed(e[2])); }
+  // 全部ちがう演算：3回の演算がすべて別の種類（4数なら演算は必ず3回）
+  function distinctOps(e) {
+    var ops = opsUsed(e);
+    var u = {};
+    ops.forEach(function (o) { u[o] = 1; });
+    return ops.length >= 3 && Object.keys(u).length === ops.length;
+  }
+
+  // ---------- 問題プール ----------
+  function keyOf(digits) { return digits.join(''); }
+  function indexPool(pool) {
+    var by = {};
+    pool.forEach(function (p) { by[keyOf(p.digits)] = p; });
+    return by;
+  }
+  var TIERS = ['入門', '初級', '中級', '上級', '達人', '名人'];
+  var UNSOLVABLE = '作れない';
+  var BASE = { '入門': 10, '初級': 20, '中級': 35, '上級': 60, '達人': 100, '名人': 180 };
+  var SCORE = { goldExtra: 120, declare: 50, declareWithHint: 25, fraction: 25, distinctOps: 25, newSolution: 15 };
+
+  // ---------- 盤面（1回の挑戦） ----------
+  // card: { v: {n,d}, e: 式の木 }
+  function newBoard(digits) {
+    return { cards: digits.map(function (k) { return { v: frac(k), e: leaf(k) }; }), history: [] };
+  }
+  function cloneCards(cards) { return cards.map(function (c) { return { v: { n: c.v.n, d: c.v.d }, e: JSON.parse(JSON.stringify(c.e)) }; }); }
+  // i を1枚目、j を2枚目として op で合体。結果は1枚目の位置に置く
+  function preview(board, i, j, op) {
+    var a = board.cards[i], b = board.cards[j];
+    if (!a || !b || i === j) return { ok: false, error: 'badsel' };
+    var v = apply(op, a.v, b.v);
+    if (v === null) return { ok: false, error: 'divzero' };
+    return { ok: true, v: v, e: node(op, a.e, b.e) };
+  }
+  function merge(board, i, j, op) {
+    var pv = preview(board, i, j, op);
+    if (!pv.ok) return pv;
+    board.history.push(cloneCards(board.cards));
+    var next = [];
+    for (var k = 0; k < board.cards.length; k++) {
+      if (k === i) next.push({ v: pv.v, e: pv.e });
+      else if (k !== j) next.push(board.cards[k]);
+    }
+    board.cards = next;
+    return { ok: true, index: j < i ? i - 1 : i, card: { v: pv.v, e: pv.e } };
+  }
+  function undo(board) {
+    if (!board.history.length) return false;
+    board.cards = board.history.pop();
+    return true;
+  }
+  function reset(board, digits) {
+    var b = newBoard(digits);
+    board.cards = b.cards; board.history = [];
+  }
+  function isFinished(board) { return board.cards.length === 1; }
+  function isWin(board) { return board.cards.length === 1 && eq(board.cards[0].v, frac(10)); }
+  function serializeBoard(board) { return { cards: cloneCards(board.cards), history: board.history.map(cloneCards) }; }
+  function restoreBoard(obj, digits) {
+    try {
+      if (!obj || !Array.isArray(obj.cards) || !obj.cards.length) return newBoard(digits);
+      // 値は式の木から再計算して検証（壊れたデータを弾く）
+      var ok = obj.cards.every(function (c) { return eq(evalTree(c.e), frac(c.v.n, c.v.d)); });
+      if (!ok) return newBoard(digits);
+      var ls = [];
+      obj.cards.forEach(function (c) { ls = ls.concat(leaves(c.e)); });
+      if (ls.slice().sort().join('') !== digits.slice().sort().join('')) return newBoard(digits);
+      return { cards: cloneCards(obj.cards), history: (obj.history || []).map(cloneCards) };
+    } catch (err) { return newBoard(digits); }
+  }
+
+  // ---------- 保存データ ----------
+  var SAVE_KEY = 'tenpuzzle_save_v1';
+  function emptySave() {
+    return { v: 1, total: 0,
+      tech: { solves: 0, fraction: 0, distinctOps: 0, newSolution: 0, declareSuccess: 0, declareFail: 0, hintsUsed: 0 },
+      sets: {} };
+  }
+  function emptyRec() {
+    return { stars: 0, found: [], bestScore: 0, bestCore: 0, declared: false, declareBest: 0, hintsUsed: 0, tries: 0, progress: null };
+  }
+  function rec(save, key) {
+    if (!save.sets[key]) save.sets[key] = emptyRec();
+    return save.sets[key];
+  }
+  function peekRec(save, key) { return save.sets[key] || null; }
+  function isSolved(r) { return !!(r && r.stars > 0); }
+  function isResolved(r) { return !!(r && (r.stars > 0 || r.declared)); }
+  function loadSave(storage) {
+    try {
+      var raw = storage && storage.getItem(SAVE_KEY);
+      if (!raw) return emptySave();
+      var s = JSON.parse(raw);
+      if (!s || s.v !== 1) return emptySave();
+      var base = emptySave();
+      s.tech = Object.assign(base.tech, s.tech || {});
+      s.sets = s.sets || {};
+      Object.keys(s.sets).forEach(function (k) { s.sets[k] = Object.assign(emptyRec(), s.sets[k]); });
+      if (typeof s.total !== 'number') s.total = 0;
+      return s;
+    } catch (err) { return emptySave(); }
+  }
+  function writeSave(storage, save) {
+    try { storage && storage.setItem(SAVE_KEY, JSON.stringify(save)); return true; } catch (err) { return false; }
+  }
+
+  // ---------- ヒント ----------
+  // 解ける組：example の第一手から3段階。作れない組：ヒント1で「作れません」と明かす（1段階のみ）
+  function hintsFor(entry) {
+    if (!entry.solvable) {
+      return [{ level: 1, text: 'この組は10を作れません。', kind: 'unsolvable' }];
+    }
+    var fm = firstMerge(parse(entry.example));
+    var sym = SYM[fm.op];
+    return [
+      { level: 1, text: '最初に ' + fm.a + ' と ' + fm.b + ' を合体', a: fm.a, b: fm.b },
+      { level: 2, text: pretty(fm.a + ' ' + sym + ' ' + fm.b), op: fm.op },
+      { level: 3, text: '→ ' + pretty(fracStr(fm.result)) + ' のカードができる', result: fm.result }
+    ];
+  }
+  function useHint(save, entry) {
+    var r = rec(save, keyOf(entry.digits));
+    var max = hintsFor(entry).length;
+    if (r.hintsUsed >= max) return null;
+    r.hintsUsed += 1;
+    save.tech.hintsUsed += 1;
+    return hintsFor(entry)[r.hintsUsed - 1];
+  }
+  function starsFor(hintsUsed) { return hintsUsed === 0 ? 3 : hintsUsed === 1 ? 2 : 1; }
+
+  // ---------- 解決・宣言 ----------
+  // 累計スコアは「ベスト更新分だけ加算」：
+  //   核点（基本点＋金枠追加＋分数経由＋全部ちがう演算）のベスト更新分 ＋ 新解法ボーナス（新規のたび）
+  //   → 累計 ＝ Σ各組のベスト核点 ＋ 15×発見解法数 ＋ Σ宣言ベスト
+  function solve(save, entry, tree) {
+    var key = keyOf(entry.digits);
+    var r = rec(save, key);
+    if (leaves(tree).sort().join('') !== entry.digits.slice().sort().join('')) throw new Error('solve: digits mismatch');
+    if (!eq(evalTree(tree), frac(10))) throw new Error('solve: not 10');
+    var c = canon(tree);
+    var isNew = r.found.indexOf(c) < 0;
+    var base = BASE[entry.tier] || 0;
+    var gold = entry.fractionRequired ? SCORE.goldExtra : 0;
+    var fr = viaFraction(tree);
+    var dop = distinctOps(tree);
+    var core = base + gold + (fr ? SCORE.fraction : 0) + (dop ? SCORE.distinctOps : 0);
+    var newB = isNew ? SCORE.newSolution : 0;
+    var attempt = core + newB;
+    var delta = Math.max(0, core - r.bestCore) + newB;
+    var stars = starsFor(r.hintsUsed);
+    var firstSolve = !isSolved(r);
+    if (isNew) r.found.push(c);
+    r.bestCore = Math.max(r.bestCore, core);
+    r.bestScore = Math.max(r.bestScore, attempt);
+    var prevStars = r.stars;
+    r.stars = Math.max(r.stars, stars);
+    r.tries += 1;
+    var hintsUsed = r.hintsUsed;
+    r.hintsUsed = 0;
+    r.progress = null;
+    save.total += delta;
+    save.tech.solves += 1;
+    if (fr) save.tech.fraction += 1;
+    if (dop) save.tech.distinctOps += 1;
+    if (isNew) save.tech.newSolution += 1;
+    return {
+      key: key, canon: c, expr: infix(tree), isNew: isNew, foundCount: r.found.length, nSolutions: entry.nSolutions,
+      base: base, gold: gold, fraction: fr, distinctOps: dop, newBonus: newB, attempt: attempt, delta: delta,
+      stars: stars, bestStars: r.stars, prevStars: prevStars, hintsUsed: hintsUsed, firstSolve: firstSolve, total: save.total
+    };
+  }
+  function declare(save, entry) {
+    var key = keyOf(entry.digits);
+    var r = rec(save, key);
+    var hintsUsed = r.hintsUsed;
+    r.tries += 1;
+    r.progress = null; // 成功でも失敗でもその回の挑戦は終了
+    if (entry.solvable) {
+      save.tech.declareFail += 1;
+      return { key: key, success: false, points: 0, delta: 0, total: save.total, hintsUsed: hintsUsed };
+    }
+    var pts = hintsUsed > 0 ? SCORE.declareWithHint : SCORE.declare;
+    var delta = Math.max(0, pts - r.declareBest);
+    var first = !r.declared;
+    r.declared = true;
+    r.declareBest = Math.max(r.declareBest, pts);
+    r.hintsUsed = 0;
+    save.total += delta;
+    save.tech.declareSuccess += 1;
+    return { key: key, success: true, points: pts, delta: delta, total: save.total, hintsUsed: hintsUsed, first: first };
+  }
+
+  // ---------- 出題 ----------
+  function unresolvedKeys(pool, save) {
+    return pool.filter(function (p) { return !isResolved(peekRec(save, keyOf(p.digits))); }).map(function (p) { return keyOf(p.digits); });
+  }
+  function pickFrom(arr, rng) { return arr.length ? arr[Math.floor((rng || Math.random)() * arr.length)] : null; }
+  // 新規セーブ（まだ1回も挑戦を終えていない）か
+  function isFreshSave(save) {
+    return Object.keys(save.sets).every(function (k) { var r = save.sets[k]; return !r.tries && !isResolved(r); });
+  }
+  var FIRST_PLAY_TIERS = ['入門', '初級'];
+  // 「あそぶ」：未解決（未判定）の組から均等にランダム。全部済みなら全組から
+  // A1補足（v0.3）：新規セーブの初回だけは入門/初級の未解決から引く
+  function pickPlay(pool, save, rng) {
+    var u = unresolvedKeys(pool, save);
+    if (isFreshSave(save)) {
+      var by = indexPool(pool);
+      var easy = u.filter(function (k) { return FIRST_PLAY_TIERS.indexOf(by[k].tier) >= 0; });
+      if (easy.length) return pickFrom(easy, rng);
+    }
+    return pickFrom(u.length ? u : pool.map(function (p) { return keyOf(p.digits); }), rng);
+  }
+  // 「次の組へ」：同じティアの未解決からランダム。尽きたら次（上）のティアへ進み、
+  // 全ティアが尽きた／作れない組のあとは未解決全体から、未解決が無ければ全組から（A3、v0.3）
+  function pickNext(pool, save, currentKey, rng) {
+    var by = indexPool(pool);
+    var cur = by[currentKey];
+    var u = unresolvedKeys(pool, save).filter(function (k) { return k !== currentKey; });
+    if (cur && cur.solvable) {
+      for (var t = TIERS.indexOf(cur.tier); t >= 0 && t < TIERS.length; t++) {
+        var same = u.filter(function (k) { return by[k].tier === TIERS[t]; });
+        if (same.length) return pickFrom(same, rng);
+      }
+    }
+    if (u.length) return pickFrom(u, rng);
+    return pickFrom(pool.map(function (p) { return keyOf(p.digits); }).filter(function (k) { return k !== currentKey; }), rng);
+  }
+
+  // ---------- 図鑑 ----------
+  // 未判定（解決も見極めもしていない）組はティアを伏せ、最小の数字ごとにまとめる
+  // 各グループは最小の数字ごと。keys は未判定の組のみ、total/resolved はグループ全体の進捗（A4、v0.3）
+  function zukanSections(pool, save) {
+    var groups = {};
+    for (var m = 1; m <= 9; m++) groups[m] = { min: m, total: 0, resolved: 0, keys: [] };
+    var tiers = {};
+    TIERS.concat([UNSOLVABLE]).forEach(function (t) { tiers[t] = { name: t, total: 0, keys: [] }; });
+    pool.forEach(function (p) {
+      var k = keyOf(p.digits);
+      var g = groups[p.digits[0]];
+      tiers[p.tier].total += 1;
+      g.total += 1;
+      if (isResolved(peekRec(save, k))) { tiers[p.tier].keys.push(k); g.resolved += 1; }
+      else g.keys.push(k);
+    });
+    var unknown = [];
+    for (var gi = 1; gi <= 9; gi++) if (groups[gi].total) unknown.push(groups[gi]);
+    return {
+      unknown: unknown,
+      unknownCount: unknown.reduce(function (s, x) { return s + x.keys.length; }, 0),
+      tiers: TIERS.concat([UNSOLVABLE]).map(function (t) { return tiers[t]; })
+    };
+  }
+  // タイルの状態
+  function tileInfo(entry, r) {
+    var k = keyOf(entry.digits);
+    if (isSolved(r)) return { key: k, state: 'solved', stars: r.stars, found: r.found.length, total: entry.nSolutions, gold: !!entry.fractionRequired, declared: false };
+    if (r && r.declared) return { key: k, state: 'declared', declared: true };
+    return { key: k, state: 'unknown', wip: !!(r && r.progress && r.progress.history && r.progress.history.length) };
+  }
+  function resolvedCount(pool, save) {
+    return pool.filter(function (p) { return isResolved(peekRec(save, keyOf(p.digits))); }).length;
+  }
+  // プレイ画面のティア表示：未判定は「？」
+  function tierLabel(entry, r) { return isResolved(r) ? entry.tier : '？'; }
+
+  // ---------- セーブの書き出し/読み込み（§7、v0.3） ----------
+  var EXPORT_FORMAT = 'tenpuzzle-save';
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function exportSave(save, now) {
+    now = now || new Date();
+    return JSON.stringify({ format: EXPORT_FORMAT, version: 1, exportedAt: now.toISOString(), save: save }, null, 2);
+  }
+  function exportFileName(now) {
+    now = now || new Date();
+    return 'tenpuzzle-save-' + now.getFullYear() + pad2(now.getMonth() + 1) + pad2(now.getDate()) + '-' + pad2(now.getHours()) + pad2(now.getMinutes()) + '.json';
+  }
+  // canonical 文字列 → 木（+ と × は多項）。検証用
+  function parseCanon(s) {
+    var p = 0;
+    function node0() {
+      if (/[0-9]/.test(s[p] || '')) { var j = p; while (/[0-9]/.test(s[j] || '')) j++; var n = parseInt(s.slice(p, j), 10); p = j; return ['n', n]; }
+      var op = s[p];
+      if ('+-*/'.indexOf(op) < 0 || !op) throw new Error('canon: op');
+      p++;
+      if (s[p] !== '(') throw new Error('canon: (');
+      p++;
+      var args = [node0()];
+      while (s[p] === ',') { p++; args.push(node0()); }
+      if (s[p] !== ')') throw new Error('canon: )');
+      p++;
+      if ((op === '-' || op === '/') && args.length !== 2) throw new Error('canon: arity');
+      if (args.length < 2) throw new Error('canon: arity');
+      var t = args[0];
+      for (var i = 1; i < args.length; i++) t = node(op, t, args[i]);
+      return t;
+    }
+    var t = node0();
+    if (p !== s.length) throw new Error('canon: trailing');
+    return t;
+  }
+  // その組の正しい解の canonical 文字列か（形式・使う数字・値10・正規形）
+  function isValidCanonFor(c, digits) {
+    try {
+      if (typeof c !== 'string' || c.length > 200) return false;
+      var t = parseCanon(c);
+      if (canon(t) !== c) return false;
+      if (leaves(t).sort().join('') !== digits.slice().sort().join('')) return false;
+      return eq(evalTree(t), frac(10));
+    } catch (err) { return false; }
+  }
+  function isNonNegInt(x) { return typeof x === 'number' && Number.isInteger(x) && x >= 0; }
+  function validTree(e, depth) {
+    if (!Array.isArray(e) || (depth || 0) > 8) return false;
+    if (e[0] === 'n') return e.length === 2 && Number.isInteger(e[1]) && e[1] >= 1 && e[1] <= 9;
+    return e.length === 3 && '+-*/'.indexOf(e[0]) >= 0 && e[0].length === 1 && validTree(e[1], (depth || 0) + 1) && validTree(e[2], (depth || 0) + 1);
+  }
+  function validCards(cards, digits) {
+    if (!Array.isArray(cards) || cards.length < 1 || cards.length > 4) return false;
+    var ls = [];
+    for (var i = 0; i < cards.length; i++) {
+      var c = cards[i];
+      if (!c || !c.v || !validTree(c.e)) return false;
+      if (!Number.isInteger(c.v.n) || !Number.isInteger(c.v.d) || c.v.d <= 0) return false;
+      var v;
+      try { v = evalTree(c.e); } catch (err) { return false; }
+      if (!eq(v, frac(c.v.n, c.v.d))) return false;
+      ls = ls.concat(leaves(c.e));
+    }
+    return ls.sort().join('') === digits.slice().sort().join('');
+  }
+  // 読み込みデータの検証。成功時は正規化した新しいセーブを返す（入力は書き換えない）
+  function validateSave(obj, pool) {
+    function fail(msg) { return { ok: false, error: msg }; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return fail('テンパズルのセーブデータではありません');
+    var s;
+    if (obj.format === EXPORT_FORMAT) {
+      if (obj.version !== 1) return fail('対応していない形式のバージョンです');
+      s = obj.save;
+    } else if (obj.v === 1 && obj.sets) {
+      s = obj; // localStorage の中身そのもの
+    } else return fail('テンパズルのセーブデータではありません');
+    if (!s || typeof s !== 'object' || s.v !== 1) return fail('対応していないセーブのバージョンです');
+    if (!isNonNegInt(s.total)) return fail('累計スコアが不正です');
+    var out = emptySave();
+    out.total = s.total;
+    var tech = s.tech || {};
+    if (typeof tech !== 'object') return fail('テクニック回数が不正です');
+    for (var tk in out.tech) {
+      if (tech[tk] === undefined) continue;
+      if (!isNonNegInt(tech[tk])) return fail('テクニック回数が不正です');
+      out.tech[tk] = tech[tk];
+    }
+    if (!s.sets || typeof s.sets !== 'object' || Array.isArray(s.sets)) return fail('組の記録が不正です');
+    var by = indexPool(pool);
+    var sum = 0;
+    var keys = Object.keys(s.sets);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i], r = s.sets[k], e = by[k];
+      if (!e) return fail('存在しない組（' + String(k).slice(0, 8) + '）の記録があります');
+      if (!r || typeof r !== 'object') return fail(k + ' の記録が不正です');
+      var nr = emptyRec();
+      var ints = ['stars', 'bestScore', 'bestCore', 'declareBest', 'hintsUsed', 'tries'];
+      for (var j = 0; j < ints.length; j++) {
+        var f = ints[j];
+        if (r[f] === undefined) continue;
+        if (!isNonNegInt(r[f])) return fail(k + ' の記録が不正です（' + f + '）');
+        nr[f] = r[f];
+      }
+      if (nr.stars > 3) return fail(k + ' の星の数が不正です');
+      if (nr.hintsUsed > hintsFor(e).length) return fail(k + ' のヒント回数が不正です');
+      if (r.declared !== undefined && typeof r.declared !== 'boolean') return fail(k + ' の宣言記録が不正です');
+      nr.declared = !!r.declared;
+      var found = r.found === undefined ? [] : r.found;
+      if (!Array.isArray(found)) return fail(k + ' の解法リストが不正です');
+      var seen = {};
+      for (var q = 0; q < found.length; q++) {
+        if (!isValidCanonFor(found[q], e.digits)) return fail(k + ' の解法リストに正しくない式があります');
+        if (seen[found[q]]) return fail(k + ' の解法リストに重複があります');
+        seen[found[q]] = 1;
+      }
+      if (found.length > e.nSolutions) return fail(k + ' の解法の数が多すぎます');
+      nr.found = found.slice();
+      if (!e.solvable && (nr.stars || found.length || nr.bestCore || nr.bestScore)) return fail(k + ' は作れない組なのに解決記録があります');
+      if (e.solvable && (nr.declared || nr.declareBest)) return fail(k + ' は解ける組なのに見極め記録があります');
+      if ((nr.stars > 0) !== (found.length > 0)) return fail(k + ' の星と解法リストが合いません');
+      if (nr.declared !== (nr.declareBest > 0)) return fail(k + ' の宣言記録が合いません');
+      if ([0, SCORE.declareWithHint, SCORE.declare].indexOf(nr.declareBest) < 0) return fail(k + ' の宣言点が不正です');
+      if (r.progress !== undefined && r.progress !== null) {
+        var pg = r.progress;
+        if (typeof pg !== 'object' || !validCards(pg.cards, e.digits)) return fail(k + ' の進行中の盤面が不正です');
+        var hist = pg.history === undefined ? [] : pg.history;
+        if (!Array.isArray(hist) || hist.length > 3) return fail(k + ' の盤面の履歴が不正です');
+        for (var hI = 0; hI < hist.length; hI++) if (!validCards(hist[hI], e.digits)) return fail(k + ' の盤面の履歴が不正です');
+        nr.progress = { cards: cloneCards(pg.cards), history: hist.map(cloneCards) };
+      }
+      sum += nr.bestCore + SCORE.newSolution * nr.found.length + nr.declareBest;
+      out.sets[k] = nr;
+    }
+    if (sum !== out.total) return fail('累計スコアが記録と合いません');
+    return { ok: true, save: out };
+  }
+  function parseImport(text, pool) {
+    if (typeof text !== 'string' || !text.trim()) return { ok: false, error: 'ファイルが空です' };
+    if (text.length > 5000000) return { ok: false, error: 'ファイルが大きすぎます' };
+    var obj;
+    try { obj = JSON.parse(text); } catch (err) { return { ok: false, error: 'JSONとして読めません（ファイルが壊れている可能性があります）' }; }
+    return validateSave(obj, pool);
+  }
+  function saveSummary(save, pool) { return { resolved: resolvedCount(pool, save), total: save.total }; }
+
+  // ---------- 設定（端末保存。セーブの書き出し対象外、D3） ----------
+  var SETTINGS_KEY = 'tenpuzzle_settings_v1';
+  function defaultSettings() { return { controlMode: 'A' }; }
+  function loadSettings(storage) {
+    try {
+      var raw = storage && storage.getItem(SETTINGS_KEY);
+      if (!raw) return defaultSettings();
+      var o = JSON.parse(raw);
+      return { controlMode: o && o.controlMode === 'B' ? 'B' : 'A' };
+    } catch (err) { return defaultSettings(); }
+  }
+  function writeSettings(storage, st) {
+    try { storage && storage.setItem(SETTINGS_KEY, JSON.stringify({ controlMode: st.controlMode === 'B' ? 'B' : 'A' })); return true; } catch (err) { return false; }
+  }
+
+  // ---------- 操作方法A「数字→演算記号→数字」（D2） ----------
+  function newInputA() { return { first: null, op: null, flip: false }; }
+  function clearInputA(st) { st.first = null; st.op = null; st.flip = false; }
+  // カードをタップ。戻り値 type: select / deselect / reselect / cancel / merge / blocked / ignore
+  function aTapCard(st, board, i) {
+    if (!(i >= 0 && i < board.cards.length)) return { type: 'ignore' };
+    if (st.first === null) { st.first = i; return { type: 'select' }; }
+    if (i === st.first) {
+      var had = st.op !== null;
+      clearInputA(st);
+      return { type: had ? 'cancel' : 'deselect' };
+    }
+    if (st.op === null) { st.first = i; return { type: 'reselect' }; }
+    var L = st.flip ? i : st.first, R = st.flip ? st.first : i;
+    var r = merge(board, L, R, st.op);
+    if (!r.ok) return { type: 'blocked', error: r.error }; // 1枚目・記号・向きは保持
+    clearInputA(st);
+    return { type: 'merge', result: r };
+  }
+  function aTapOp(st, op) {
+    if (st.first === null || !OPF[op]) return false;
+    st.op = op;
+    return true;
+  }
+  function aFlip(st) {
+    if (st.first === null || st.op === null) return false;
+    st.flip = !st.flip;
+    return true;
+  }
+  // 入力中の式：「8」→「8 ÷ ?」→（⇄）「? ÷ 8」
+  function aExpr(st, board) {
+    if (st.first === null || !board.cards[st.first]) return '';
+    var a = fracStr(board.cards[st.first].v);
+    if (st.op === null) return pretty(a);
+    var s = SYM[st.op];
+    return pretty(st.flip ? '? ' + s + ' ' + a : a + ' ' + s + ' ?');
+  }
+  function aGuide(st) {
+    if (st.first === null) return '数字をえらぶ';
+    if (st.op === null) return '記号をえらぶ';
+    return 'もう1つの数字をえらぶ';
+  }
+
+  return {
+    frac: frac, add: add, sub: sub, mul: mul, div: div, apply: apply, isInt: isInt, eq: eq, fracStr: fracStr, approx: approx,
+    leaf: leaf, node: node, canon: canon, infix: infix, pretty: pretty, parse: parse, evalTree: evalTree, leaves: leaves,
+    firstMerge: firstMerge, viaFraction: viaFraction, distinctOps: distinctOps, opsUsed: opsUsed,
+    keyOf: keyOf, indexPool: indexPool, TIERS: TIERS, UNSOLVABLE: UNSOLVABLE, BASE: BASE, SCORE: SCORE, SYM: SYM,
+    newBoard: newBoard, preview: preview, merge: merge, undo: undo, reset: reset, isFinished: isFinished, isWin: isWin,
+    serializeBoard: serializeBoard, restoreBoard: restoreBoard,
+    SAVE_KEY: SAVE_KEY, emptySave: emptySave, rec: rec, peekRec: peekRec, isSolved: isSolved, isResolved: isResolved,
+    loadSave: loadSave, writeSave: writeSave,
+    hintsFor: hintsFor, useHint: useHint, starsFor: starsFor, solve: solve, declare: declare,
+    unresolvedKeys: unresolvedKeys, pickPlay: pickPlay, pickNext: pickNext,
+    zukanSections: zukanSections, tileInfo: tileInfo, resolvedCount: resolvedCount, tierLabel: tierLabel,
+    isFreshSave: isFreshSave, FIRST_PLAY_TIERS: FIRST_PLAY_TIERS,
+    EXPORT_FORMAT: EXPORT_FORMAT, exportSave: exportSave, exportFileName: exportFileName, parseCanon: parseCanon,
+    isValidCanonFor: isValidCanonFor, validateSave: validateSave, parseImport: parseImport, saveSummary: saveSummary,
+    SETTINGS_KEY: SETTINGS_KEY, defaultSettings: defaultSettings, loadSettings: loadSettings, writeSettings: writeSettings,
+    newInputA: newInputA, clearInputA: clearInputA, aTapCard: aTapCard, aTapOp: aTapOp, aFlip: aFlip, aExpr: aExpr, aGuide: aGuide
+  };
+})();
+if (typeof module !== 'undefined' && module.exports) module.exports = TP;
+// ===== CORE_END =====
+
+// ===== UI =====
+(function () {
+  'use strict';
+  if (typeof document === 'undefined') return;
+  var POOL = JSON.parse(document.getElementById('pool-data').textContent);
+  var BY = TP.indexPool(POOL);
+  var store = null;
+  try { store = window.localStorage; } catch (e) { store = null; }
+  var save = TP.loadSave(store);
+  function persist() { TP.writeSave(store, save); }
+  var settings = TP.loadSettings(store);
+
+  var ui = { screen: 'title', key: null, board: null, sel: [], a: TP.newInputA(), msg: '', msgKind: '', result: null, modal: null, open: {},
+    titleMsg: '', titleMsgKind: '', pendingImport: null };
+  function modeA() { return settings.controlMode !== 'B'; }
+  var app = document.getElementById('app');
+
+  // ---- 効果音（簡易） ----
+  var actx = null;
+  function beep(freq, dur, type, vol) {
+    try {
+      if (!actx) { var C = window.AudioContext || window.webkitAudioContext; if (!C) return; actx = new C(); }
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(vol || 0.08, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + (dur || 0.12));
+      o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime + (dur || 0.12));
+    } catch (e) { /* 音が出なくても続行 */ }
+  }
+  var SFX = {
+    tap: function () { beep(660, 0.05, 'triangle', 0.05); },
+    pop: function () { beep(520, 0.08, 'square', 0.05); setTimeout(function () { beep(880, 0.09, 'square', 0.05); }, 60); },
+    bad: function () { beep(160, 0.18, 'sawtooth', 0.05); },
+    win: function () { [523, 659, 784, 1047].forEach(function (f, i) { setTimeout(function () { beep(f, 0.14, 'triangle', 0.07); }, i * 90); }); }
+  };
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function fracHTML(f) {
+    if (f.d === 1) return '<span class="num">' + esc(TP.pretty(f.n)) + '</span>';
+    var neg = f.n < 0;
+    return '<span class="frac-wrap">' + (neg ? '<span class="num" style="font-size:1.3rem">−</span>' : '') +
+      '<span class="frac"><span class="fn">' + Math.abs(f.n) + '</span><span class="fd">' + f.d + '</span></span></span>';
+  }
+  function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n); }
+
+  // ---- 画面遷移 ----
+  function openSet(key) {
+    ui.key = key; ui.sel = []; TP.clearInputA(ui.a); ui.msg = ''; ui.msgKind = '';
+    var r = TP.peekRec(save, key);
+    ui.board = TP.restoreBoard(r && r.progress, BY[key].digits);
+    ui.screen = 'play';
+    render();
+  }
+  function saveProgress() {
+    var r = TP.rec(save, ui.key);
+    r.progress = ui.board.history.length ? TP.serializeBoard(ui.board) : null;
+    persist();
+  }
+  function go(screen) { ui.screen = screen; ui.modal = null; render(); }
+
+  // ---- 描画 ----
+  function render() {
+    var h = '';
+    if (ui.screen === 'title') h = renderTitle();
+    else if (ui.screen === 'zukan') h = renderZukan();
+    else if (ui.screen === 'play') h = renderPlay();
+    else if (ui.screen === 'result') h = renderResult();
+    else if (ui.screen === 'settings') h = renderSettings();
+    if (ui.modal) h += renderModal();
+    app.innerHTML = h;
+  }
+  function renderTitle() {
+    var done = TP.resolvedCount(POOL, save);
+    return '<div class="title-wrap">' +
+      '<div class="logo">テン<b>パズル</b></div>' +
+      '<div class="tag">4つの数で 10 をつくろう</div>' +
+      '<div class="stats">' +
+      '<div class="stat"><div class="sub">解決済み</div><div class="v" id="t-progress">' + done + '<span class="sub"> / ' + POOL.length + '組</span></div></div>' +
+      '<div class="stat"><div class="sub">累計スコア</div><div class="v" id="t-total">' + save.total + '</div></div>' +
+      '</div>' +
+      '<div class="title-btns">' +
+      '<button class="btn primary wide" data-act="play">あそぶ</button>' +
+      '<button class="btn wide" data-act="zukan">図鑑</button>' +
+      '<button class="btn wide" data-act="settings">設定<span class="chip mode-chip">操作方法' + (modeA() ? 'A' : 'B') + '</span></button>' +
+      '<div class="data-row">' +
+      '<button class="btn" data-act="export">データ書き出し</button>' +
+      '<button class="btn" data-act="import">データ読み込み</button>' +
+      '</div>' +
+      '</div>' +
+      '<div class="tmsg ' + ui.titleMsgKind + '" id="t-msg">' + esc(ui.titleMsg) + '</div>' +
+      '<div class="sub">v0.3 試作 ・ 記録はこの端末に保存されます</div>' +
+      '</div>';
+  }
+  function renderSettings() {
+    function opt(m, title, desc) {
+      var on = settings.controlMode === m;
+      return '<button class="opt' + (on ? ' on' : '') + '" data-act="set-mode" data-mode="' + m + '"><div class="h"><span class="dot"></span>' + title + (m === 'A' ? '<span class="chip">標準</span>' : '') + '</div><div class="sub">' + desc + '</div></button>';
+    }
+    return '<div class="bar"><button class="btn" data-act="title">← 戻る</button><div class="grow"><h2>設定</h2></div></div>' +
+      '<div class="sec"><div class="sec-h"><span class="name">操作方法</span></div>' +
+      opt('A', '操作方法A　数字 → 記号 → 数字', '数字を1つえらび、記号をえらんで、もう1つの数字をタップすると合体。−と÷は先にえらんだ数字が左。⇄で向きを入れ替え') +
+      opt('B', '操作方法B　数字2枚 → 記号', '数字を2枚えらんでから記号をタップすると合体。1枚目が左。記号ボタンに結果が出る') +
+      '<div class="sub">設定はこの端末に保存されます（データ書き出しには含まれません）</div></div>';
+  }
+  function tileHTML(key) {
+    var e = BY[key], r = TP.peekRec(save, key), t = TP.tileInfo(e, r);
+    var cls = 'tile' + (t.gold ? ' gold' : '') + (t.wip ? ' wip' : '');
+    var s = '';
+    if (t.state === 'solved') s = '<div class="s"><span class="stars">' + starStr(t.stars) + '</span> ' + t.found + '/' + t.total + '通り</div>';
+    else if (t.state === 'declared') s = '<div class="s"><span class="stamp">見極め</span></div>';
+    else s = '<div class="s">未挑戦</div>';
+    if (t.state === 'unknown' && r && r.tries) s = '<div class="s">挑戦中</div>';
+    return '<button class="' + cls + '" data-act="open" data-key="' + key + '"><div class="d">' + e.digits.join('') + '</div>' + s + '</button>';
+  }
+  function renderZukan() {
+    var z = TP.zukanSections(POOL, save);
+    var h = '<div class="bar"><button class="btn" data-act="title">← 戻る</button><div class="grow"><h2>図鑑</h2></div>' +
+      '<span class="chip">' + TP.resolvedCount(POOL, save) + ' / ' + POOL.length + '組</span></div>';
+    // 未判定
+    h += '<div class="sec"><div class="sec-h"><span class="name">未判定</span><span class="sub">ティアは解くと判明</span><span class="cnt">残り ' + z.unknownCount + '組</span></div>';
+    if (!z.unknownCount) h += '<div class="sub">すべて判定済み！</div>';
+    z.unknown.forEach(function (g) {
+      var open = !!ui.open[g.min];
+      h += '<div class="grp' + (open ? ' open' : '') + '"><button class="grp-h" data-act="grp" data-min="' + g.min + '"><span class="arrow">▶</span>' + g.min + ' から始まる組<span class="cnt">解決 ' + g.resolved + '/' + g.total + '</span></button>';
+      if (open) h += g.keys.length ? '<div class="tiles">' + g.keys.map(tileHTML).join('') + '</div>' : '<div class="sub" style="padding-bottom:8px">このグループはすべて判定済み</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    // ティア別
+    z.tiers.forEach(function (t) {
+      h += '<div class="sec"><div class="sec-h"><span class="name">' + t.name + '</span>' +
+        (t.name === TP.UNSOLVABLE ? '<span class="sub">見極めた組</span>' : '<span class="sub">基本 ' + TP.BASE[t.name] + '点</span>') +
+        '<span class="cnt">' + t.keys.length + ' / ' + t.total + '組</span></div>';
+      h += t.keys.length ? '<div class="tiles">' + t.keys.map(tileHTML).join('') + '</div>' : '<div class="sub">まだありません</div>';
+      h += '</div>';
+    });
+    return h;
+  }
+  function renderPlay() {
+    var e = BY[ui.key], r = TP.peekRec(save, ui.key);
+    var b = ui.board;
+    var h = '<div class="play-head"><button class="btn" data-act="zukan">図鑑</button>' +
+      '<span class="chip" id="p-tier">' + TP.tierLabel(e, r) + '</span>' +
+      '<div class="digits">' + e.digits.join(' ') + '</div>' +
+      '<div class="score-mini">累計<br><span id="p-total">' + save.total + '</span></div></div>';
+    h += '<div class="cards">';
+    var A = modeA();
+    b.cards.forEach(function (c, i) {
+      var si = A ? (ui.a.first === i ? 0 : -1) : ui.sel.indexOf(i);
+      var won = b.cards.length === 1 && TP.isWin(b);
+      h += '<button class="card' + (si >= 0 ? ' sel' : '') + (won ? ' won' : '') + '" data-act="card" data-i="' + i + '">' +
+        (si >= 0 ? '<span class="ord">' + (si + 1) + '</span>' : '') + fracHTML(c.v) +
+        (c.v.d !== 1 ? '<span class="approx">≈' + TP.approx(c.v) + '</span>' : '') + '</button>';
+    });
+    h += '</div>';
+    if (A) {
+      // 操作方法A：入力中の式と案内文、記号は入力待ち表示、⇄は記号の入力待ち中のみ
+      h += '<div class="expr-box" id="p-expr">' + esc(TP.aExpr(ui.a, b)) + '</div>';
+      h += '<div class="guide" id="p-guide">' + TP.aGuide(ui.a) + '</div>';
+      h += '<div class="ops">';
+      ['+', '-', '*', '/'].forEach(function (op) {
+        var on = ui.a.op === op;
+        h += '<button class="op' + (on ? ' on' : '') + '" data-act="op" data-op="' + op + '"' + (ui.a.first === null ? ' disabled' : '') + '><span class="sym">' + TP.pretty(TP.SYM[op]) + '</span></button>';
+      });
+      h += '</div>';
+      h += '<div class="swap-row"><button class="btn" data-act="swap"' + (ui.a.op !== null ? '' : ' disabled') + '>⇄ 向きを入れ替え</button></div>';
+      return renderPlayTools(h, e, r, b);
+    }
+    var two = ui.sel.length === 2;
+    h += '<div class="ops">';
+    ['+', '-', '*', '/'].forEach(function (op) {
+      var pv = '', bad = false;
+      if (two) {
+        var p = TP.preview(b, ui.sel[0], ui.sel[1], op);
+        var A = TP.fracStr(b.cards[ui.sel[0]].v), B = TP.fracStr(b.cards[ui.sel[1]].v);
+        if (p.ok) pv = TP.pretty(A + ' ' + TP.SYM[op] + ' ' + B + ' = ' + TP.fracStr(p.v));
+        else { pv = '0では割れません'; bad = true; }
+      } else pv = ui.sel.length ? 'もう1枚えらぶ' : 'カードを2枚えらぶ';
+      h += '<button class="op' + (bad ? ' bad' : '') + '" data-act="op" data-op="' + op + '"' + (two ? '' : ' disabled') + '><span class="sym">' + TP.pretty(TP.SYM[op]) + '</span><span class="pv">' + esc(pv) + '</span></button>';
+    });
+    h += '</div>';
+    h += '<div class="swap-row"><button class="btn" data-act="swap"' + (two ? '' : ' disabled') + '>⇄ 1枚目と2枚目を入れ替え</button></div>';
+    return renderPlayTools(h, e, r, b);
+  }
+  function renderPlayTools(h, e, r, b) {
+    h += '<div class="msg ' + ui.msgKind + '" id="p-msg">' + esc(ui.msg) + '</div>';
+    var hints = TP.hintsFor(e), used = r ? r.hintsUsed : 0;
+    h += '<div class="tools">' +
+      '<button class="btn" data-act="undo"' + (b.history.length ? '' : ' disabled') + '>↶ 1手戻す</button>' +
+      '<button class="btn" data-act="reset"' + (b.history.length ? '' : ' disabled') + '>リセット</button>' +
+      '<button class="btn" data-act="hint"' + (used < hints.length ? '' : ' disabled') + '>ヒント ' + used + '/' + hints.length + '</button>' +
+      '</div>';
+    h += '<button class="btn wide declare" data-act="declare">「10は作れません」と宣言する</button>';
+    if (used) {
+      h += '<div class="hints" id="p-hints">';
+      for (var k = 0; k < used; k++) h += '<p><b>ヒント' + (k + 1) + '</b>　' + esc(hints[k].text) + '</p>';
+      if (e.solvable) h += '<p class="note">※ある解き方の1手目です。いまの盤面と違う道でもOK</p>';
+      else h += '<p class="note">※ヒントを見てからの宣言成功は ' + TP.SCORE.declareWithHint + '点</p>';
+      h += '</div>';
+    }
+    return h;
+  }
+  function renderResult() {
+    var R = ui.result, h = '<div class="res">';
+    if (R.kind === 'solve') {
+      h += '<h2>10 できた！</h2>';
+      h += '<div class="expr" id="r-expr">' + esc(TP.pretty(R.expr)) + ' = 10</div>';
+      h += '<div class="big-stars">' + starStr(R.stars) + '</div>';
+      h += '<div class="techs">' + (R.fraction ? '<span class="chip">分数経由</span>' : '') + (R.distinctOps ? '<span class="chip">全部ちがう演算</span>' : '') +
+        (R.gold ? '<span class="chip" style="background:var(--gold-bg);color:var(--gold)">分数必須の組</span>' : '') + '</div>';
+      h += R.isNew ? '<div class="newsol" id="r-new">新しい解法！ これで ' + R.foundCount + '/' + R.nSolutions + ' 通り</div>'
+        : '<div class="sub" id="r-new">この解法は発見済み（' + R.foundCount + '/' + R.nSolutions + ' 通り）</div>';
+      h += '<div class="breakdown">' +
+        '<div class="ln"><span>基本点（' + BY[R.key].tier + '）</span><span>' + R.base + '</span></div>' +
+        (R.gold ? '<div class="ln"><span>分数必須の組</span><span>+' + R.gold + '</span></div>' : '') +
+        (R.fraction ? '<div class="ln"><span>分数経由</span><span>+' + TP.SCORE.fraction + '</span></div>' : '') +
+        (R.distinctOps ? '<div class="ln"><span>全部ちがう演算</span><span>+' + TP.SCORE.distinctOps + '</span></div>' : '') +
+        (R.isNew ? '<div class="ln"><span>新しい解法</span><span>+' + R.newBonus + '</span></div>' : '') +
+        '<div class="ln tot"><span>今回の得点</span><span>' + R.attempt + '</span></div>' +
+        '<div class="ln"><span class="sub">累計に加算（ベスト更新分＋新解法）</span><span id="r-delta">+' + R.delta + '</span></div>' +
+        '<div class="ln"><span class="sub">累計スコア</span><span>' + R.total + '</span></div>' +
+        '</div>';
+      h += '<div class="btns"><button class="btn primary wide" data-act="next">次の組へ</button><button class="btn wide" data-act="again">この組をもう一度</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
+    } else if (R.kind === 'declare' && R.success) {
+      h += '<h2>見極め成功！</h2><div class="big-stamp">見極め</div>';
+      h += '<div class="breakdown"><div class="ln"><span>宣言成功' + (R.hintsUsed ? '（ヒント使用）' : '') + '</span><span>' + R.points + '</span></div>' +
+        '<div class="ln"><span class="sub">累計に加算</span><span id="r-delta">+' + R.delta + '</span></div>' +
+        '<div class="ln"><span class="sub">累計スコア</span><span>' + R.total + '</span></div></div>';
+      h += '<div class="btns"><button class="btn primary wide" data-act="next">次の組へ</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
+    } else {
+      h += '<h2 style="color:var(--ng)">宣言失敗…</h2><p>この組は 10 を<b>作れます</b>。<br>今回の挑戦は終了（0点）。</p><p class="sub">組は未解決のまま残ります。もう一度考えてみよう。</p>';
+      h += '<div class="btns"><button class="btn primary wide" data-act="again">もう一度挑戦</button><button class="btn wide" data-act="next">次の組へ</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
+    }
+    return h + '</div>';
+  }
+  function renderModal() {
+    if (ui.modal === 'import') {
+      var cur = TP.saveSummary(save, POOL), nw = TP.saveSummary(ui.pendingImport, POOL);
+      return '<div class="modal-bg"><div class="modal"><p>記録を上書きしますか？</p>' +
+        '<div class="sub" style="margin-bottom:14px" id="m-import">いまの記録：解決 ' + cur.resolved + '組・' + cur.total + '点<br>読み込む記録：解決 ' + nw.resolved + '組・' + nw.total + '点</div>' +
+        '<div class="row"><button class="btn" data-act="import-no">やめる</button><button class="btn primary" data-act="import-yes">上書きする</button></div></div></div>';
+    }
+    return '<div class="modal-bg"><div class="modal"><p>本当に10は作れませんか？</p>' +
+      '<div class="row"><button class="btn" data-act="modal-no">考え直す</button><button class="btn primary" data-act="modal-yes">宣言する</button></div></div></div>';
+  }
+
+  // ---- 操作 ----
+  function setMsg(m, kind) { ui.msg = m; ui.msgKind = kind || ''; }
+  function onCard(i) {
+    var at = ui.sel.indexOf(i);
+    if (at >= 0) ui.sel.splice(at, 1);
+    else if (ui.sel.length < 2) ui.sel.push(i);
+    else ui.sel = [i];
+    setMsg('');
+    SFX.tap();
+    render();
+  }
+  // 操作方法A：カードのタップ
+  function onCardA(i) {
+    var r = TP.aTapCard(ui.a, ui.board, i);
+    if (r.type === 'blocked') {
+      setMsg(r.error === 'divzero' ? '0 で割ることはできません。別の数字をえらんでください' : 'えらび直してください', 'ng');
+      SFX.bad(); render(); return;
+    }
+    setMsg('');
+    if (r.type === 'merge') { afterMerge(); return; }
+    SFX.tap();
+    render();
+  }
+  function onOp(op) {
+    if (modeA()) { if (TP.aTapOp(ui.a, op)) { setMsg(''); SFX.tap(); render(); } return; }
+    if (ui.sel.length !== 2) return;
+    var res = TP.merge(ui.board, ui.sel[0], ui.sel[1], op);
+    if (!res.ok) {
+      setMsg(res.error === 'divzero' ? '0 で割ることはできません' : 'カードを2枚えらんでください', 'ng');
+      SFX.bad(); render(); return;
+    }
+    ui.sel = [];
+    setMsg('');
+    afterMerge();
+  }
+  function afterMerge() {
+    if (TP.isFinished(ui.board)) {
+      if (TP.isWin(ui.board)) {
+        var e = BY[ui.key];
+        var R = TP.solve(save, e, ui.board.cards[0].e);
+        R.kind = 'solve';
+        persist();
+        ui.result = R;
+        SFX.win();
+        ui.screen = 'result';
+        render();
+        return;
+      }
+      setMsg(TP.fracStr(ui.board.cards[0].v) + ' になりました。1手戻すかリセット', 'ng');
+      SFX.bad();
+    } else SFX.pop();
+    saveProgress();
+    render();
+  }
+  function handle(act, el) {
+    var ds = (el && el.dataset) || {};
+    switch (act) {
+      case 'title': go('title'); break;
+      case 'zukan': go('zukan'); break;
+      case 'play': openSet(TP.pickPlay(POOL, save)); break;
+      case 'open': openSet(ds.key); break;
+      case 'grp': ui.open[ds.min] = !ui.open[ds.min]; render(); break;
+      case 'card': if (modeA()) onCardA(parseInt(ds.i, 10)); else onCard(parseInt(ds.i, 10)); break;
+      case 'op': onOp(ds.op); break;
+      case 'swap':
+        if (modeA()) { if (TP.aFlip(ui.a)) { setMsg(''); render(); } }
+        else if (ui.sel.length === 2) { ui.sel.reverse(); render(); }
+        break;
+      case 'undo': if (TP.undo(ui.board)) { ui.sel = []; TP.clearInputA(ui.a); setMsg(''); saveProgress(); render(); } break;
+      case 'reset': TP.reset(ui.board, BY[ui.key].digits); ui.sel = []; TP.clearInputA(ui.a); setMsg(''); saveProgress(); render(); break;
+      case 'settings': ui.titleMsg = ''; go('settings'); break;
+      case 'set-mode':
+        settings.controlMode = ds.mode === 'B' ? 'B' : 'A';
+        TP.writeSettings(store, settings);
+        render();
+        break;
+      case 'export': doExport(); break;
+      case 'import': {
+        var inp = document.getElementById('import-file');
+        if (inp) { inp.value = ''; inp.click(); }
+        break;
+      }
+      case 'import-no': ui.modal = null; ui.pendingImport = null; setTitleMsg('読み込みをやめました（記録はそのままです）', ''); render(); break;
+      case 'import-yes': {
+        var ns = ui.pendingImport;
+        ui.modal = null; ui.pendingImport = null;
+        if (ns) {
+          save = ns;
+          persist();
+          setTitleMsg('読み込みました（解決 ' + TP.resolvedCount(POOL, save) + '組・' + save.total + '点）', 'ok');
+        }
+        render();
+        break;
+      }
+      case 'hint': if (TP.useHint(save, BY[ui.key])) { persist(); render(); } break;
+      case 'declare': ui.modal = 'declare'; render(); break;
+      case 'modal-no': ui.modal = null; render(); break;
+      case 'modal-yes': {
+        ui.modal = null;
+        var R = TP.declare(save, BY[ui.key]);
+        R.kind = 'declare';
+        persist();
+        ui.board = TP.newBoard(BY[ui.key].digits);
+        ui.result = R;
+        if (R.success) SFX.win(); else SFX.bad();
+        ui.screen = 'result';
+        render();
+        break;
+      }
+      case 'next': openSet(TP.pickNext(POOL, save, ui.key)); break;
+      case 'again': openSet(ui.key); break;
+    }
+  }
+  function setTitleMsg(m, kind) { ui.titleMsg = m; ui.titleMsgKind = kind || ''; }
+  function exportText() { return TP.exportSave(save); }
+  function doExport() {
+    try {
+      var text = exportText();
+      var blob = new Blob([text], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = TP.exportFileName();
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      setTitleMsg('記録を書き出しました（' + a.download + '）', 'ok');
+    } catch (err) {
+      setTitleMsg('書き出しに失敗しました', 'ng');
+    }
+    render();
+  }
+  // 読み込み：検証に通ったら確認ダイアログ。失敗時は既存データに触れずメッセージのみ
+  function importText(text) {
+    var r = TP.parseImport(text, POOL);
+    if (!r.ok) {
+      ui.pendingImport = null;
+      setTitleMsg('読み込めませんでした：' + r.error + '（いまの記録はそのままです）', 'ng');
+      SFX.bad();
+    } else {
+      ui.pendingImport = r.save;
+      ui.modal = 'import';
+      setTitleMsg('', '');
+    }
+    ui.screen = 'title';
+    render();
+    return r;
+  }
+  var fileInput = document.getElementById('import-file');
+  if (fileInput && fileInput.addEventListener) {
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      if (f.size > 5000000) { setTitleMsg('読み込めませんでした：ファイルが大きすぎます（いまの記録はそのままです）', 'ng'); render(); return; }
+      var rd = new FileReader();
+      rd.onload = function () { importText(String(rd.result || '')); };
+      rd.onerror = function () { setTitleMsg('読み込めませんでした：ファイルを開けません（いまの記録はそのままです）', 'ng'); render(); };
+      rd.readAsText(f);
+    });
+  }
+  document.addEventListener('click', function (ev) {
+    var el = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!el || el.disabled) return;
+    handle(el.getAttribute('data-act'), el);
+  });
+
+  // テスト・デバッグ用の窓口
+  window.__TP_UI = { ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },
+    handle: handle, render: render, POOL: POOL, exportText: exportText, importText: importText };
+  render();
+})();
+</script>
+</body>
+</html>
