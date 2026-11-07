@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>テンパズル v0.7</title>
+<title>テンパズル v0.8</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
@@ -97,6 +97,25 @@ button:disabled{cursor:default;opacity:.4}
 .tutNav{display:flex;gap:10px;margin-top:10px}
 .tutNav .miniBtn{flex:0 0 110px}
 .tutNav .bigbtn{flex:1;padding:13px;font-size:1.05rem}
+.rankLead{text-align:center;font-weight:700;margin:6px 0 10px}
+.rankRow input{width:100%;padding:12px 16px;font-size:16px;font-family:inherit;font-weight:700;border:3px solid var(--line);border-radius:999px;outline:none;color:var(--ink);background:var(--card)}
+.rankRow input:focus{border-color:var(--gold-2)}
+.rankMsg{text-align:center;line-height:1.8;min-height:1.2em;margin:8px 0;color:var(--sub);font-weight:700}
+.rankMsg.ng{color:var(--ng)}
+.rankNameBtns{display:flex;gap:8px}.rankNameBtns .btn{flex:1}
+.rankTabs{display:flex;gap:6px;margin:6px 0 10px}
+.rankTab{flex:1;padding:8px 4px;border-radius:999px;background:var(--chip);color:var(--brown);font-weight:800;font-size:.85rem;font-family:"M PLUS Rounded 1c",sans-serif}
+.rankTab.on{background:linear-gradient(180deg,var(--gold-1),var(--gold-2));box-shadow:inset 0 0 0 2px var(--brown-line)}
+.rankItem{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:var(--chip);margin-bottom:6px;font-weight:700}
+.rankItem.me{background:var(--gold-bg);box-shadow:inset 0 0 0 2px var(--gold-2)}
+.rankNo{width:40px;text-align:center;flex:none}
+.rankName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rankVals{display:flex;gap:8px;flex:none;font-variant-numeric:tabular-nums;font-size:.78rem;color:var(--sub)}
+.rankVals b{font-size:.95rem;color:var(--ink)}
+.rankVals .key b{color:var(--accent)}
+.note{font-size:.78rem;color:var(--sub);text-align:center;margin:8px 0 0}
+.rankFoot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:.8rem;color:var(--sub)}
+.rankRename{color:var(--brown-line);text-decoration:underline;font-size:.8rem;font-weight:700}
 .nav-row{display:flex;justify-content:space-between;gap:8px;margin-top:18px}
 .btn.ghost{background:transparent;border:1px dashed var(--line);box-shadow:none;color:var(--sub);font-weight:700}
 .remain{text-align:center;color:var(--sub);font-weight:700;margin:12px 0}
@@ -207,6 +226,30 @@ button:disabled{cursor:default;opacity:.4}
 <body>
 <div id="app"></div>
 <input type="file" id="import-file" accept=".json,application/json" hidden>
+<!-- ===== ランキング（v0.8、D22。TEN POP の rankOverlay 構成） ===== -->
+<div id="rankOverlay" class="overlay hidden">
+  <div class="tutCard">
+    <button class="tutClose" id="rankClose" aria-label="閉じる">✕</button>
+    <h2 class="tutTitle">🏆 ランキング</h2>
+    <div id="rankNameBox" class="hidden">
+      <p class="rankLead" id="rankNameLead">ランキングにのせるニックネームを決めてね</p>
+      <div class="rankRow"><input id="rankNameInput" type="text" maxlength="10" placeholder="ニックネーム（10文字まで）" autocomplete="nickname"></div>
+      <p class="rankMsg" id="rankNameMsg"></p>
+      <div class="rankNameBtns"><button class="btn" id="rankNameCancel">やめる</button><button class="btn primary" id="rankNameOk">決定</button></div>
+    </div>
+    <div id="rankMain">
+      <div class="rankTabs" id="rankTabs">
+        <button class="rankTab on" id="rankTab_score" data-sort="score">累計スコア</button>
+        <button class="rankTab" id="rankTab_solved" data-sort="solved">解いた数</button>
+        <button class="rankTab" id="rankTab_solutions" data-sort="solutions">解法の数</button>
+      </div>
+      <p class="note" id="rankLegend" style="margin:0 0 8px">○点＝累計スコア　解○組＝解いた数　法○＝解法の数</p>
+      <div id="rankList"><p class="rankMsg">読み込み中…</p></div>
+      <p class="note" id="rankNote"></p>
+      <div class="rankFoot"><span id="rankMe"></span><button class="rankRename" id="rankRename">名前を変える</button></div>
+    </div>
+  </div>
+</div>
 <!-- ===== チュートリアル（v0.6、D16。TEN POP の showTut 形式） ===== -->
 <div id="howtoOverlay" class="overlay hidden">
   <div class="tutCard">
@@ -1013,6 +1056,67 @@ var TP = (function () {
   }
   function saveSummary(save, pool) { return { resolved: resolvedCount(pool, save), total: save.total }; }
 
+  // ---------- ランキング（v0.8、D22） ----------
+  // 公開前に実URLへ差し替える。プレースホルダのままなら通信せず「準備中」を表示する
+  var RANKING_URL = 'https://script.google.com/macros/s/AKfycbxqT4shk1JlgJKoRW414UdXk1F5AYbwrGj2ZGfH-STmHvgm7-zMrBEdRSnvnqdU7ltTaA/exec';
+  var NAME_KEY = 'tenpuzzle_name'; // セーブ（tenpuzzle_save_v1）とは別キー。セーブのリセット・読み込みでは消えない
+  var NAME_MAX = 10;
+  var RANK_TOP = 20;
+  var RANK_SORTS = { score: '累計スコア', solved: '解いた数', solutions: '解法の数' };
+  function isRankingReady(url) { return typeof url === 'string' && /^https?:\/\//.test(url); }
+  function cleanName(n) { return String(n == null ? '' : n).replace(/[\u0000-\u001f]/g, '').trim().slice(0, NAME_MAX); }
+  function loadName(storage) { try { return cleanName((storage && storage.getItem(NAME_KEY)) || ''); } catch (err) { return ''; } }
+  function saveName(storage, n) {
+    var c = cleanName(n);
+    if (!c) return false;
+    try { storage && storage.setItem(NAME_KEY, c); return true; } catch (err) { return false; }
+  }
+  // 送信する数字：解いた数＝図鑑の解決数（解法発見＋見極め成功）、解法の数＝見つけた解法の総数、累計スコア
+  function rankingStats(save, pool) {
+    var solutions = 0;
+    Object.keys(save.sets).forEach(function (k) { solutions += (save.sets[k].found || []).length; });
+    return { solved: resolvedCount(pool, save), solutions: solutions, score: save.total };
+  }
+  function rankingParams(save, pool, name) {
+    var st = rankingStats(save, pool);
+    return { name: cleanName(name), solved: st.solved, solutions: st.solutions, score: st.score };
+  }
+  // POST 本文（application/x-www-form-urlencoded）
+  function encodeParams(p) {
+    return ['name', 'solved', 'solutions', 'score'].map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(String(p[k])).replace(/%20/g, '+');
+    }).join('&');
+  }
+  // 一覧の行を整える：形の正しい行だけ残し、同じニックネームは updated が最新の1行だけにする
+  function updatedTime(u) {
+    if (typeof u === 'number') return u;
+    var t = Date.parse(u);
+    return isNaN(t) ? -Infinity : t;
+  }
+  function cleanRows(rows) {
+    if (!Array.isArray(rows)) return null;
+    var best = {}, order = [];
+    rows.forEach(function (r, i) {
+      if (!r || typeof r !== 'object') return;
+      var name = cleanName(r.name);
+      if (!name) return;
+      var row = { name: name, solved: Number(r.solved), solutions: Number(r.solutions), score: Number(r.score), updated: r.updated, _t: updatedTime(r.updated), _i: i };
+      if (![row.solved, row.solutions, row.score].every(function (x) { return isFinite(x) && x >= 0; })) return;
+      var cur = best[name];
+      if (!cur) { best[name] = row; order.push(name); }
+      else if (row._t > cur._t || (row._t === cur._t && row._i > cur._i)) best[name] = row;
+    });
+    return order.map(function (n) { return best[n]; });
+  }
+  // 並び替え：選んだ項目の大きい順。同点は 累計スコア→解いた数→解法の数→名前 の順で決める
+  function sortRows(rows, key) {
+    var keys = [key].concat(['score', 'solved', 'solutions'].filter(function (k) { return k !== key; }));
+    return rows.slice().sort(function (a, b) {
+      for (var i = 0; i < keys.length; i++) if (b[keys[i]] !== a[keys[i]]) return b[keys[i]] - a[keys[i]];
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    }).slice(0, RANK_TOP);
+  }
+
   // ---------- 設定（端末保存。セーブの書き出し対象外、D3） ----------
   var SETTINGS_KEY = 'tenpuzzle_settings_v1';
   function defaultSettings() { return { controlMode: 'A' }; }
@@ -1153,6 +1257,9 @@ var TP = (function () {
 
   return {
     clearStatus: clearStatus, canonDisplay: canonDisplay, solutionBook: solutionBook,
+    RANKING_URL: RANKING_URL, NAME_KEY: NAME_KEY, NAME_MAX: NAME_MAX, RANK_TOP: RANK_TOP, RANK_SORTS: RANK_SORTS,
+    isRankingReady: isRankingReady, cleanName: cleanName, loadName: loadName, saveName: saveName,
+    rankingStats: rankingStats, rankingParams: rankingParams, encodeParams: encodeParams, cleanRows: cleanRows, sortRows: sortRows,
     canon4: canon4, solutionKeys: solutionKeys, parseCanon4: parseCanon4, canon3: canon3, canon2: canon2, parseCanon2: parseCanon2, canon2Tree: canon2Tree, SAVE_VERSION: SAVE_VERSION, hasOldSave: hasOldSave,
     frac: frac, add: add, sub: sub, mul: mul, div: div, apply: apply, isInt: isInt, eq: eq, fracStr: fracStr, approx: approx,
     leaf: leaf, node: node, canon: canon, infix: infix, pretty: pretty, parse: parse, evalTree: evalTree, leaves: leaves,
@@ -1263,6 +1370,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       '<button class="btn primary wide" data-act="play">あそぶ</button>' +
       '<button class="btn wide" data-act="zukan">図鑑</button>' +
       '<button class="btn wide" data-act="howto" id="howtoBtn">📖 あそびかた</button>' +
+      '<button class="btn wide" data-act="ranking" id="rankBtnTitle">🏆 ランキング</button>' +
       '<button class="btn wide" data-act="settings">設定<span class="chip mode-chip">操作方法' + (modeA() ? 'A' : 'B') + '</span></button>' +
       '<div class="data-row">' +
       '<button class="btn" data-act="export">データ書き出し</button>' +
@@ -1270,7 +1378,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       '</div>' +
       '</div>' +
       '<div class="tmsg ' + ui.titleMsgKind + '" id="t-msg">' + esc(ui.titleMsg) + '</div>' +
-      '<div class="sub">v0.7 試作 ・ 記録はこの端末に保存されます</div>' +
+      '<div class="sub">v0.8 試作 ・ 記録はこの端末に保存されます</div>' +
       '</div>';
   }
   function renderSettings() {
@@ -1580,6 +1688,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       case 'to-title': ui.sel = []; TP.clearInputA(ui.a); setMsg(''); go('title'); break;
       case 'skip': openSet(TP.pickNext(POOL, save, ui.key)); break;
       case 'howto': openTut(); break;
+      case 'ranking': openRanking(); break;
       case 'modal-no': ui.modal = null; render(); break;
       case 'modal-yes': {
         ui.modal = null;
@@ -1669,10 +1778,119 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     el('tutNext').addEventListener('click', function () { if (tutIdx >= 4) closeTut(); else showTut(tutIdx + 1); });
   }
 
+  // ===== ランキング（v0.8、D22。TEN POP の openRanking と同じ流れ） =====
+  var rankingUrl = TP.RANKING_URL;
+  var rankSort = 'score';
+  var rankRows = null;
+  var rankSeq = 0; // 開き直したときに古い通信の結果を捨てる
+  function fetchFn() { return (typeof window !== 'undefined' && window.fetch) ? window.fetch.bind(window) : null; }
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error('timeout')); }, ms);
+      promise.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+  function rankShow(main) {
+    el('rankNameBox').classList.toggle('hidden', main);
+    el('rankMain').classList.toggle('hidden', !main);
+  }
+  function renderRank() {
+    ['score', 'solved', 'solutions'].forEach(function (k) { el('rankTab_' + k).classList.toggle('on', k === rankSort); });
+    var me = TP.loadName(store);
+    el('rankMe').textContent = me ? 'ニックネーム：' + me : '';
+    if (!rankRows) return;
+    if (!rankRows.length) { el('rankList').innerHTML = '<p class="rankMsg">まだ登録がありません。<br>最初の1位をねらおう！</p>'; return; }
+    var html = '';
+    TP.sortRows(rankRows, rankSort).forEach(function (r, i) {
+      var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '位';
+      var mine = me && r.name === me ? ' me' : '';
+      function v(k, label, unit) { return '<span class="' + (k === rankSort ? 'key' : '') + '">' + label + '<b>' + r[k] + '</b>' + unit + '</span>'; }
+      html += '<div class="rankItem' + mine + '"><span class="rankNo">' + medal + '</span><span class="rankName">' + esc(r.name) + '</span>' +
+        '<span class="rankVals">' + v('score', '', '点') + v('solved', '解', '組') + v('solutions', '法', '') + '</span></div>';
+    });
+    el('rankList').innerHTML = html;
+  }
+  // 開いた時点で現在の数字を登録（POST）→ 一覧を取得（GET）。失敗してもゲーム本体には影響させない
+  function rankSubmitAndLoad() {
+    var seq = ++rankSeq;
+    rankRows = null;
+    rankShow(true);
+    renderRank();
+    el('rankNote').textContent = '';
+    if (!TP.isRankingReady(rankingUrl)) {
+      el('rankList').innerHTML = '<p class="rankMsg">ランキングは準備中です。<br>（サーバー接続後に表示されます）</p>';
+      return Promise.resolve('notready');
+    }
+    var f = fetchFn();
+    if (!f) { el('rankList').innerHTML = '<p class="rankMsg ng">この環境では通信できません。</p>'; return Promise.resolve('nofetch'); }
+    el('rankList').innerHTML = '<p class="rankMsg">登録中…</p>';
+    var params = TP.rankingParams(save, POOL, TP.loadName(store));
+    var posted = true;
+    var post;
+    try {
+      post = withTimeout(f(rankingUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: TP.encodeParams(params) }), 9000)
+        .catch(function () { posted = false; });
+    } catch (err) { posted = false; post = Promise.resolve(); }
+    return post.then(function () {
+      if (seq !== rankSeq) return 'stale';
+      el('rankList').innerHTML = '<p class="rankMsg">読み込み中…</p>';
+      return withTimeout(f(rankingUrl + (rankingUrl.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), { method: 'GET' }), 9000)
+        .then(function (res) { if (!res || (res.ok === false)) throw new Error('http'); return res.json(); })
+        .then(function (data) {
+          if (seq !== rankSeq) return 'stale';
+          var rows = TP.cleanRows(data);
+          if (!rows) throw new Error('format');
+          rankRows = rows;
+          renderRank();
+          el('rankNote').textContent = (posted ? '' : '※今回の記録は登録できませんでした。') + '上位' + TP.RANK_TOP + '件を表示しています';
+          return posted ? 'ok' : 'post-failed';
+        })
+        .catch(function () {
+          if (seq !== rankSeq) return 'stale';
+          el('rankList').innerHTML = '<p class="rankMsg ng">ランキングを読み込めませんでした。<br>通信環境を確認して、もう一度開いてね。</p>';
+          el('rankNote').textContent = posted ? '' : '※記録の登録もできませんでした。';
+          return 'error';
+        });
+    });
+  }
+  function rankAskName(renaming) {
+    rankShow(false);
+    el('rankNameLead').textContent = renaming ? '新しいニックネームを入れてね' : 'ランキングにのせるニックネームを決めてね';
+    el('rankNameInput').value = renaming ? TP.loadName(store) : '';
+    el('rankNameMsg').textContent = renaming ? '※前の名前で登録した記録はランキングに残ります' : '';
+    el('rankNameCancel').classList.toggle('hidden', !renaming);
+    rankRenaming = !!renaming;
+  }
+  var rankRenaming = false;
+  function openRanking() {
+    el('rankOverlay').classList.remove('hidden');
+    if (!TP.loadName(store)) { rankAskName(false); return Promise.resolve('askname'); }
+    return rankSubmitAndLoad();
+  }
+  function rankNameOk() {
+    var n = TP.cleanName(el('rankNameInput').value);
+    if (!n) { el('rankNameMsg').textContent = 'ニックネームを入れてね'; return Promise.resolve('empty'); }
+    if (!TP.saveName(store, n)) { el('rankNameMsg').textContent = 'この端末に保存できませんでした'; return Promise.resolve('savefail'); }
+    return rankSubmitAndLoad();
+  }
+  function closeRanking() { rankSeq++; el('rankOverlay').classList.add('hidden'); }
+  if (el('rankOverlay')) {
+    el('rankClose').addEventListener('click', closeRanking);
+    el('rankOverlay').addEventListener('click', function (e) { if (e.target === el('rankOverlay')) closeRanking(); });
+    el('rankNameOk').addEventListener('click', function () { rankNameOk(); });
+    el('rankNameCancel').addEventListener('click', function () { rankShow(true); renderRank(); });
+    el('rankRename').addEventListener('click', function () { rankAskName(true); });
+    ['score', 'solved', 'solutions'].forEach(function (k) {
+      el('rankTab_' + k).addEventListener('click', function () { rankSort = k; renderRank(); });
+    });
+  }
+
   // テスト・デバッグ用の窓口
   window.__TP_UI = { ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },
     handle: handle, render: render, POOL: POOL, exportText: exportText, importText: importText,
-    showTut: showTut, getTutIdx: function () { return tutIdx; } };
+    showTut: showTut, getTutIdx: function () { return tutIdx; },
+    openRanking: openRanking, rankNameOk: rankNameOk, rankSubmitAndLoad: rankSubmitAndLoad,
+    setRankingUrl: function (u) { rankingUrl = u; }, getRankSort: function () { return rankSort; } };
   render();
 })();
 </script>
