@@ -358,7 +358,7 @@ test('E02 CORE 以外：v0.9 から消えた/変わった行は、バージョ�
   removed.forEach(l => assert(allowedRe.some(r => r.test(l)), '想定外の変更: ' + l));
   assert(removed.length <= 16, '変更行が多すぎる: ' + removed.length);
 });
-test('E03 v0.9 ファイルは残っており、v0.9 のままタイトルが v0.9', () => { assert(/<title>テンパズル v0\.9<\/title>/.test(V09.html)); assert.strictEqual(V09.html, fs.readFileSync(path.join(root, 'index.html'), 'utf8')); });
+test('E03 v0.9 ファイルは残っており、v0.9 のままタイトルが v0.9', () => { assert(/<title>テンパズル v0\.9<\/title>/.test(V09.html)); assert.strictEqual(V10.html, fs.readFileSync(path.join(root, 'index.html'), 'utf8'), '公開中の index.html は v1.0'); });
 
 // ===================== F. ブラウザ（Playwright）：配線・設定画面・結果画面の描画 =====================
 let pw = null; try { pw = require('playwright'); } catch (e) { /* 下で失敗として扱う */ }
