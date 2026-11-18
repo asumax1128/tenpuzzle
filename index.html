@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>テンパズル v1.0</title>
+<title>テンパズル v1.1</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
@@ -203,6 +203,21 @@ button:disabled{cursor:default;opacity:.4}
 .big-stamp{display:inline-block;border:4px solid var(--ng);color:var(--ng);border-radius:12px;padding:4px 14px;font-size:1.6rem;font-weight:900;transform:rotate(-8deg);margin:10px 0}
 .res .btns{display:flex;flex-direction:column;gap:10px;margin-top:10px}
 
+/* v1.1：今日のお題（デイリー） */
+.dwrap{padding:0 2px}
+.dhead{text-align:center;margin:6px 0 10px}
+.dhead .date{font-weight:800;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.dhead .sum{color:var(--sub);font-variant-numeric:tabular-nums}
+.dcard{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px;margin-bottom:8px;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--shadow);color:var(--ink);font-family:inherit}
+.dcard.done{border:2px solid var(--gold);background:var(--gold-bg)}
+.dcard .no{flex:none;width:2.6em;font-weight:800;color:var(--sub);font-size:.8rem}
+.dcard .dg{flex:1;font-weight:900;font-size:1.4rem;letter-spacing:.18em;font-variant-numeric:tabular-nums}
+.dcard .meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:.8rem;font-variant-numeric:tabular-nums}
+.dcard .pts{font-weight:800}
+.dnote{margin-top:8px;color:var(--sub);text-align:center;font-size:.85rem}
+.rankModes{display:flex;gap:6px;margin:6px 0 4px}
+.dailyNote{color:var(--sub);font-weight:700;margin:4px 0}
+
 /* v1.0：クリア時の小さな祝福（操作をブロックしない。transform/opacity のみ・pointer-events なし） */
 .res .expr.fx-glow{position:relative;isolation:isolate}
 .res .expr.fx-glow::before{content:"";position:absolute;left:50%;top:50%;width:130%;height:230%;border-radius:50%;pointer-events:none;z-index:-1;opacity:0;
@@ -255,6 +270,10 @@ button:disabled{cursor:default;opacity:.4}
       <div class="rankNameBtns"><button class="btn" id="rankNameCancel">やめる</button><button class="btn primary" id="rankNameOk">決定</button></div>
     </div>
     <div id="rankMain">
+      <div class="rankModes" id="rankModes">
+        <button class="rankTab on" id="rankMode_total" data-mode="total">累計</button>
+        <button class="rankTab" id="rankMode_daily" data-mode="daily">今日のデイリー</button>
+      </div>
       <div class="rankTabs" id="rankTabs">
         <button class="rankTab on" id="rankTab_score" data-sort="score">累計スコア</button>
         <button class="rankTab" id="rankTab_solved" data-sort="solved">解いた数</button>
@@ -262,6 +281,7 @@ button:disabled{cursor:default;opacity:.4}
       </div>
       <p class="note" id="rankLegend" style="margin:0 0 8px">○点＝累計スコア　解○組＝解いた数　法○＝解法の数</p>
       <div id="rankList"><p class="rankMsg">読み込み中…</p></div>
+      <p class="note dailyNote hidden" id="rankDailyNote"></p>
       <p class="note" id="rankNote"></p>
       <div class="rankFoot"><span id="rankMe"></span><button class="rankRename" id="rankRename">名前を変える</button></div>
     </div>
@@ -1519,6 +1539,196 @@ var TP = (function () {
     return api;
   }
 
+  // ---------- v1.1：今日のお題（デイリー）。選出は純関数。将来のオンライン対戦（組セットの共有）でも再利用できる形 ----------
+  var JST_OFFSET_MS = 9 * 3600 * 1000;
+  // 端末のタイムゾーンに依らず UTC+9 の日付 'YYYY-MM-DD' を返す。ms は UNIX ミリ秒
+  function jstDateString(ms) {
+    var d = new Date((typeof ms === 'number' ? ms : Date.now()) + JST_OFFSET_MS);
+    function p(n, w) { var t = String(n); while (t.length < w) t = '0' + t; return t; }
+    return p(d.getUTCFullYear(), 4) + '-' + p(d.getUTCMonth() + 1, 2) + '-' + p(d.getUTCDate(), 2);
+  }
+  function isDateString(s) {
+    if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    var y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10);
+    var t = new Date(Date.UTC(y, m - 1, d));
+    return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+  }
+  function addDays(dateStr, n) { // 暦の日付 + n 日
+    var t = new Date(Date.UTC(+dateStr.slice(0, 4), +dateStr.slice(5, 7) - 1, +dateStr.slice(8, 10) + n));
+    return jstDateString(t.getTime() - JST_OFFSET_MS);
+  }
+  function dayNumber(dateStr) { return Math.round(Date.UTC(+dateStr.slice(0, 4), +dateStr.slice(5, 7) - 1, +dateStr.slice(8, 10)) / 86400000); }
+  // FNV-1a 32bit（UTF-8 バイト列に対して）
+  function fnv1a32(str) {
+    var bytes = unescape(encodeURIComponent(String(str)));
+    var h = 0x811c9dc5;
+    for (var i = 0; i < bytes.length; i++) {
+      h ^= bytes.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h >>> 0;
+  }
+  // mulberry32：0以上1未満の乱数を返す関数を作る
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // 枠の定義。tiers＝その枠で引くティア。choice＝重み付き抽選で引くティアを決める
+  var DAILY_SLOTS = [
+    { tiers: ['入門', '初級'] },
+    { tiers: ['中級'] },
+    { choice: [{ w: 45, tiers: ['上級'] }, { w: 25, tiers: ['達人'] }, { w: 30, tiers: ['作れない'] }] }
+  ];
+  var DAILY_ANCHOR = '2026-01-01'; // 「前日除外」の連鎖の起点（この日は除外なし）
+  var DAILY_CHAIN_MAX = 36500;     // 起点から離れすぎた日付（端末時計の異常）は除外なしで引く
+  var bucketCache = { pool: null, by: null };
+  function tierBuckets(pool) {
+    if (bucketCache.pool === pool) return bucketCache.by;
+    var by = dict();
+    pool.forEach(function (e) { var t = e.solvable ? e.tier : UNSOLVABLE; (by[t] = by[t] || []).push(keyOf(e.digits)); });
+    Object.keys(by).forEach(function (t) { by[t].sort(); });
+    bucketCache.pool = pool; bucketCache.by = by;
+    return by;
+  }
+  // 汎用の組セット抽選：seed（文字列）から決定的に slots の数だけ組キーを返す。exclude の組は避ける。重複なし
+  function drawSets(pool, seed, slots, exclude) {
+    var by = tierBuckets(pool), rng = mulberry32(fnv1a32(seed)), ex = dict(), chosen = [], taken = dict();
+    (exclude || []).forEach(function (k) { ex[k] = true; });
+    slots.forEach(function (slot) {
+      var tiers = slot.tiers;
+      if (slot.choice) {
+        var total = 0; slot.choice.forEach(function (c) { total += c.w; });
+        var x = rng() * total, acc = 0, pick = slot.choice[slot.choice.length - 1];
+        for (var i = 0; i < slot.choice.length; i++) { acc += slot.choice[i].w; if (x < acc) { pick = slot.choice[i]; break; } }
+        tiers = pick.tiers;
+      }
+      var all = [];
+      tiers.forEach(function (t) { all = all.concat(by[t] || []); });
+      all.sort();
+      var cand = all.filter(function (k) { return !ex[k] && !taken[k]; });
+      if (!cand.length) cand = all.filter(function (k) { return !taken[k]; });
+      var r = rng();
+      var k = cand.length ? cand[Math.floor(r * cand.length)] : null;
+      if (k !== null) { chosen.push(k); taken[k] = true; }
+    });
+    return chosen;
+  }
+  var dailyCache = { pool: null, map: null };
+  // その日（JST の 'YYYY-MM-DD'）の全員共通の3組（組キーの配列）。前日の3組は除外する
+  function dailySets(pool, dateStr) {
+    if (!isDateString(dateStr)) return null;
+    if (dailyCache.pool !== pool) dailyCache = { pool: pool, map: dict() };
+    var n = dayNumber(dateStr), a = dayNumber(DAILY_ANCHOR);
+    if (n < a || n - a > DAILY_CHAIN_MAX) return drawSets(pool, dateStr, DAILY_SLOTS, []);
+    var prev = [], d = DAILY_ANCHOR;
+    for (var i = a; i <= n; i++) {
+      var cur = dailyCache.map[d];
+      if (!cur) { cur = drawSets(pool, d, DAILY_SLOTS, prev); dailyCache.map[d] = cur; }
+      prev = cur;
+      if (i < n) d = addDays(d, 1);
+    }
+    return prev.slice();
+  }
+
+  // ---------- v1.1：デイリーの記録（別キー。セーブ書き出しの対象外） ----------
+  var DAILY_KEY = 'tenpuzzle_daily_v1';
+  var DAILY_PT_MAX = 365;     // 1組で取れる最大の今回得点（核点350＋新解法15）
+  var DAILY_SCORE_MAX = 1095; // 3組の合計の上限（365×3）
+  function emptyDaily() { return { v: 1, days: dict() }; }
+  function cleanDailyEntry(e) {
+    if (!e || typeof e !== 'object') return null;
+    if ((e.s !== 'clear' && e.s !== 'declare') || !isNonNegInt(e.p) || e.p > DAILY_PT_MAX) return null;
+    return { s: e.s, p: e.p };
+  }
+  function loadDaily(storage) {
+    var out = emptyDaily();
+    try {
+      var raw = storage && storage.getItem(DAILY_KEY);
+      if (!raw) return out;
+      var o = JSON.parse(raw);
+      if (!o || o.v !== 1 || !o.days || typeof o.days !== 'object' || Array.isArray(o.days)) return out;
+      Object.keys(o.days).forEach(function (date) {
+        if (!isDateString(date) || !o.days[date] || typeof o.days[date] !== 'object') return;
+        var day = dict(), any = false;
+        Object.keys(o.days[date]).forEach(function (k) {
+          if (!/^\d{4}$/.test(k)) return;
+          var c = cleanDailyEntry(o.days[date][k]);
+          if (c) { day[k] = c; any = true; }
+        });
+        if (any) out.days[date] = day;
+      });
+    } catch (err) { return emptyDaily(); }
+    return out;
+  }
+  function writeDaily(storage, daily) {
+    if (!storage) return false;
+    try { storage.setItem(DAILY_KEY, JSON.stringify(daily)); return true; } catch (err) { return false; }
+  }
+  // 結果 R（kind: 'solve' / 'declare'）をその日の記録に反映。その日その組の「最初のクリア」だけ記録する（再挑戦で加算しない）。
+  // 点は solve＝今回の得点(attempt)、declare 成功＝宣言点。記録したら true
+  function dailyApply(daily, date, setKeys, R) {
+    if (!daily || !R || !isDateString(date) || !setKeys || setKeys.indexOf(R.key) < 0) return false;
+    var s, p;
+    if (R.kind === 'solve') { s = 'clear'; p = R.attempt; }
+    else if (R.kind === 'declare' && R.success) { s = 'declare'; p = R.points; }
+    else return false;
+    if (!isNonNegInt(p) || p > DAILY_PT_MAX) return false;
+    var day = daily.days[date] || (daily.days[date] = dict());
+    if (day[R.key]) return false;
+    day[R.key] = { s: s, p: p };
+    return true;
+  }
+  function dailySummary(daily, date, setKeys) {
+    var day = (daily && daily.days[date]) || {};
+    var items = (setKeys || []).map(function (k) {
+      var e = day[k];
+      return e ? { key: k, status: e.s, pts: e.p } : { key: k, status: 'none', pts: 0 };
+    });
+    var done = items.filter(function (i) { return i.status !== 'none'; }).length;
+    var score = items.reduce(function (a, i) { return a + i.pts; }, 0);
+    return { date: date, items: items, done: done, total: items.length, score: score, complete: items.length > 0 && done === items.length };
+  }
+  // デイリーランキング：送信は3組すべて終わった後だけ（終わっていなければ null）
+  function dailyRankingParams(daily, date, setKeys, name) {
+    var sm = dailySummary(daily, date, setKeys), n = cleanName(name);
+    if (!sm.complete || !n || !isDateString(date)) return null;
+    return { board: 'daily', date: date, dscore: sm.score, name: n };
+  }
+  function encodeDailyParams(p) {
+    return ['board', 'date', 'dscore', 'name'].map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(String(p[k])).replace(/%20/g, '+');
+    }).join('&');
+  }
+  function dailyGetUrl(base, date, t) {
+    return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'board=daily&date=' + encodeURIComponent(date) + (t !== undefined ? '&t=' + t : '');
+  }
+  function cleanDailyRows(rows) {
+    if (!Array.isArray(rows)) return null;
+    var best = dict(), order = [];
+    rows.forEach(function (r, i) {
+      if (!r || typeof r !== 'object') return;
+      var name = cleanName(r.name), sc = Number(r.dscore);
+      if (!name || !isFinite(sc) || sc < 0 || sc > DAILY_SCORE_MAX) return;
+      var row = { name: name, dscore: sc, updated: r.updated, _t: updatedTime(r.updated), _i: i };
+      var cur = best[name];
+      if (!cur) { best[name] = row; order.push(name); }
+      else if (row._t > cur._t || (row._t === cur._t && row._i > cur._i)) best[name] = row;
+    });
+    return order.map(function (n) { return best[n]; });
+  }
+  function sortDailyRows(rows) {
+    return rows.slice().sort(function (a, b) {
+      if (b.dscore !== a.dscore) return b.dscore - a.dscore;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    }).slice(0, RANK_TOP);
+  }
+
   return {
     dict: dict, hasKey: hasKey, migrateRec: migrateRec, inspectSave: inspectSave, recContribution: recContribution, revOf: revOf, sameRev: sameRev,
     checkRecord: checkRecord,
@@ -1543,7 +1753,12 @@ var TP = (function () {
     isValidCanonFor: isValidCanonFor, validateSave: validateSave, parseImport: parseImport, saveSummary: saveSummary,
     SETTINGS_KEY: SETTINGS_KEY, defaultSettings: defaultSettings, loadSettings: loadSettings, writeSettings: writeSettings,
     newInputA: newInputA, clearInputA: clearInputA, aTapCard: aTapCard, aTapOp: aTapOp, aFlip: aFlip, aExpr: aExpr, aGuide: aGuide,
-    PRAISE: PRAISE, praiseFor: praiseFor, celebrationFor: celebrationFor, BGM: BGM, createBgm: createBgm
+    PRAISE: PRAISE, praiseFor: praiseFor, celebrationFor: celebrationFor, BGM: BGM, createBgm: createBgm,
+    jstDateString: jstDateString, isDateString: isDateString, addDays: addDays, fnv1a32: fnv1a32, mulberry32: mulberry32,
+    DAILY_SLOTS: DAILY_SLOTS, DAILY_ANCHOR: DAILY_ANCHOR, drawSets: drawSets, dailySets: dailySets,
+    DAILY_KEY: DAILY_KEY, DAILY_PT_MAX: DAILY_PT_MAX, DAILY_SCORE_MAX: DAILY_SCORE_MAX, emptyDaily: emptyDaily, loadDaily: loadDaily, writeDaily: writeDaily,
+    dailyApply: dailyApply, dailySummary: dailySummary, dailyRankingParams: dailyRankingParams, encodeDailyParams: encodeDailyParams,
+    dailyGetUrl: dailyGetUrl, cleanDailyRows: cleanDailyRows, sortDailyRows: sortDailyRows
   };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = TP;
@@ -1638,9 +1853,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     return h;
   }
   var settings = TP.loadSettings(store);
+  var nowFn = function () { return Date.now(); };            // テストで差し替え可
+  function todayJst() { return TP.jstDateString(nowFn()); }
+  var dailyData = TP.loadDaily(store);                         // v1.1：デイリーの記録（tenpuzzle_daily_v1。セーブとは別）
+  function dailyKeys(date) { return TP.dailySets(POOL, date) || []; }
+  function dailySum(date) { return TP.dailySummary(dailyData, date, dailyKeys(date)); }
 
   var ui = { screen: 'title', key: null, board: null, sel: [], a: TP.newInputA(), msg: '', msgKind: '', result: null, modal: null, open: {},
-    titleMsg: bootMsg, titleMsgKind: bootKind, pendingImport: null };
+    titleMsg: bootMsg, titleMsgKind: bootKind, pendingImport: null, daily: null };
   function modeA() { return settings.controlMode !== 'B'; }
   var app = document.getElementById('app');
 
@@ -1690,7 +1910,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
   function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n); }
 
   // ---- 画面遷移 ----
-  function openSet(key) {
+  function openSet(key, daily) {
+    ui.daily = daily || null; // v1.1：デイリー画面から開いたときだけ日付つき
     ui.key = key; ui.sel = []; TP.clearInputA(ui.a); ui.msg = ''; ui.msgKind = '';
     var r = TP.peekRec(save, key);
     ui.board = TP.restoreBoard(r && r.progress, BY[key].digits);
@@ -1702,7 +1923,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     r.progress = ui.board.history.length ? TP.serializeBoard(ui.board) : null;
     persist();
   }
-  function go(screen) { ui.screen = screen; ui.modal = null; render(); }
+  function go(screen) { ui.screen = screen; ui.modal = null; if (screen !== 'play' && screen !== 'result') ui.daily = null; render(); }
 
   // ---- 描画 ----
   function render() {
@@ -1712,6 +1933,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     else if (ui.screen === 'play') h = renderPlay();
     else if (ui.screen === 'result') h = renderResult();
     else if (ui.screen === 'settings') h = renderSettings();
+    else if (ui.screen === 'daily') h = renderDaily();
     else if (ui.screen === 'book') h = renderBook();
     if (ui.modal) h += renderModal();
     app.innerHTML = h;
@@ -1727,6 +1949,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       '</div>' +
       '<div class="title-btns">' +
       '<button class="btn primary wide" data-act="play">あそぶ</button>' +
+      '<button class="btn wide" data-act="daily" id="dailyBtnTitle">📅 今日のお題 <span class="chip" id="t-daily-n">' + dailySum(todayJst()).done + '/3</span></button>' +
       '<button class="btn wide" data-act="zukan">図鑑</button>' +
       '<button class="btn wide" data-act="howto" id="howtoBtn">📖 あそびかた</button>' +
       '<button class="btn wide" data-act="ranking" id="rankBtnTitle">🏆 ランキング</button>' +
@@ -1739,6 +1962,23 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       '<div class="tmsg ' + ui.titleMsgKind + '" id="t-msg">' + esc(ui.titleMsg) + '</div>' +
       '<div class="sub">記録はこの端末に保存されます</div>' +
       '</div>';
+  }
+  function renderDaily() {
+    var date = todayJst(), sm = dailySum(date);
+    var h = '<div class="bar"><button class="btn" data-act="title">← 戻る</button><div class="grow"><h2>今日のお題</h2></div></div><div class="dwrap">';
+    h += '<div class="dhead"><div class="date" id="d-date">' + date + '</div>' +
+      '<div class="sum"><span id="d-progress">' + sm.done + '/' + sm.total + '</span> 組クリア ・ デイリースコア <b id="d-score">' + sm.score + '</b> 点</div></div>';
+    sm.items.forEach(function (it, i) {
+      var e = BY[it.key], r = TP.peekRec(save, it.key);
+      var tier = (i < 2 || it.status !== 'none' || TP.isResolved(r)) ? e.tier : '？'; // 枠3は作れない組が混ざるので、解決するまで伏せる
+      var st = it.status === 'clear' ? 'クリア' : it.status === 'declare' ? '見極め成功' : '未挑戦';
+      h += '<button class="dcard' + (it.status !== 'none' ? ' done' : '') + '" data-act="daily-open" data-key="' + it.key + '" data-slot="' + (i + 1) + '">' +
+        '<span class="no">お題' + (i + 1) + '</span><span class="dg">' + e.digits.join(' ') + '</span>' +
+        '<span class="meta"><span class="chip dtier">' + tier + '</span><span class="dst">' + st + '</span><span class="pts">' + (it.status === 'none' ? '—' : '+' + it.pts + '点') + '</span></span></button>';
+    });
+    h += '<div class="btns" style="margin-top:10px"><button class="btn wide" data-act="daily-rank" id="dailyRankBtn">🏆 デイリーランキング</button></div>';
+    h += '<div class="dnote">得点は各組の「最初のクリア」だけが数えられます。作れない組が混ざることもあります。</div></div>';
+    return h;
   }
   function renderSettings() {
     function bgmOpt(v, title, desc) {
@@ -1871,6 +2111,23 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     }
     return h;
   }
+  function dailyNoteHTML(R) {
+    if (!R.daily) return '';
+    var d = R.daily;
+    return '<div class="sub" id="r-daily">' + (d.recorded
+      ? '📅 デイリー +' + d.pts + '点（今日 ' + d.done + '/' + d.total + '組・' + d.score + '点）'
+      : '📅 この組のデイリー点は記録済みです（最初のクリアだけ数えます）') + '</div>';
+  }
+  // v1.1：デイリー画面から開いた組の結果を、その日の記録に反映（最初のクリアだけ）。本体セーブとは独立
+  function recordDaily(R) {
+    R.daily = null;
+    if (!ui.daily || readOnly || conflict) return;
+    var date = ui.daily.date, keys = dailyKeys(date);
+    var recorded = TP.dailyApply(dailyData, date, keys, R);
+    if (recorded) TP.writeDaily(store, dailyData);
+    var sm = TP.dailySummary(dailyData, date, keys), it = sm.items.filter(function (x) { return x.key === R.key; })[0];
+    if (it && it.status !== 'none') R.daily = { recorded: recorded, pts: it.pts, done: sm.done, total: sm.total, score: sm.score };
+  }
   function renderResult() {
     var R = ui.result, h = '<div class="res">';
     var fx = TP.celebrationFor(R, Math.random);
@@ -1896,13 +2153,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
         '<div class="ln"><span class="sub">累計に加算（ベスト更新分＋新解法）</span><span id="r-delta">+' + R.delta + '</span></div>' +
         '<div class="ln"><span class="sub">累計スコア</span><span>' + R.total + '</span></div>' +
         '</div>';
-      h += '<div class="btns"><button class="btn primary wide" data-act="next">次の組へ</button><button class="btn wide" data-act="again">この組をもう一度</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
+      h += dailyNoteHTML(R);
+      h += '<div class="btns">' + (ui.daily ? '<button class="btn primary wide" data-act="daily" id="r-daily-back">デイリーへ戻る</button>' : '') + '<button class="btn' + (ui.daily ? '' : ' primary') + ' wide" data-act="next">次の組へ</button><button class="btn wide" data-act="again">この組をもう一度</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
     } else if (R.kind === 'declare' && R.success) {
       h += '<h2>見極め成功！</h2><div class="big-stamp' + (fx.declareStamp ? ' fx-stamp' : '') + '" id="r-declare-stamp">見極め</div>';
       h += '<div class="breakdown"><div class="ln"><span>宣言成功' + (R.hintsUsed ? '（ヒント使用）' : '') + '</span><span>' + R.points + '</span></div>' +
         '<div class="ln"><span class="sub">累計に加算</span><span id="r-delta">+' + R.delta + '</span></div>' +
         '<div class="ln"><span class="sub">累計スコア</span><span>' + R.total + '</span></div></div>';
-      h += '<div class="btns"><button class="btn primary wide" data-act="next">次の組へ</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
+      h += dailyNoteHTML(R);
+      h += '<div class="btns">' + (ui.daily ? '<button class="btn primary wide" data-act="daily" id="r-daily-back">デイリーへ戻る</button>' : '') + '<button class="btn' + (ui.daily ? '' : ' primary') + ' wide" data-act="next">次の組へ</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
     } else {
       h += '<h2 style="color:var(--ng)">宣言失敗…</h2><p>この組は 10 を<b>作れます</b>。<br>今回の挑戦は終了（0点）。</p><p class="sub">組は未解決のまま残ります。もう一度考えてみよう。</p>';
       h += '<div class="btns"><button class="btn primary wide" data-act="again">もう一度挑戦</button><button class="btn wide" data-act="next">次の組へ</button><button class="btn wide" data-act="zukan">図鑑へ</button></div>';
@@ -1989,6 +2248,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
         var R = TP.solve(save, e, ui.board.cards[0].e);
         R.kind = 'solve';
         persist();
+        recordDaily(R);
         ui.result = R;
         SFX.win();
         ui.screen = 'result';
@@ -2075,13 +2335,14 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       case 'to-title': ui.sel = []; TP.clearInputA(ui.a); setMsg(''); go('title'); break;
       case 'skip': openSet(TP.pickNext(POOL, save, ui.key)); break;
       case 'howto': openTut(); break;
-      case 'ranking': openRanking(); break;
+      case 'ranking': openRanking('total'); break;
       case 'modal-no': ui.modal = null; render(); break;
       case 'modal-yes': {
         ui.modal = null;
         var R = TP.declare(save, BY[ui.key]);
         R.kind = 'declare';
         persist();
+        recordDaily(R);
         ui.board = TP.newBoard(BY[ui.key].digits);
         ui.result = R;
         if (R.success) SFX.win(); else SFX.bad();
@@ -2090,7 +2351,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
         break;
       }
       case 'next': openSet(TP.pickNext(POOL, save, ui.key)); break;
-      case 'again': openSet(ui.key); break;
+      case 'again': openSet(ui.key, ui.daily); break;
+      case 'daily': ui.titleMsg = ''; go('daily'); break;
+      case 'daily-open': openSet(ds.key, { date: todayJst() }); break;
+      case 'daily-rank': openRanking('daily'); break;
     }
   }
   function setTitleMsg(m, kind) { ui.titleMsg = m; ui.titleMsgKind = kind || ''; }
@@ -2168,6 +2432,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
   // ===== ランキング（v0.8、D22。TEN POP の openRanking と同じ流れ） =====
   var rankingUrl = TP.RANKING_URL;
   var rankSort = 'score';
+  var rankMode = 'total'; // v1.1：'total'（累計）/ 'daily'（今日のデイリー）
+  var rankDailyRows = null;
   var rankRows = null;
   var rankSeq = 0; // 開き直したときに古い通信の結果を捨てる
   function fetchFn() { return (typeof window !== 'undefined' && window.fetch) ? window.fetch.bind(window) : null; }
@@ -2182,9 +2448,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     el('rankMain').classList.toggle('hidden', !main);
   }
   function renderRank() {
+    var daily = rankMode === 'daily';
+    el('rankMode_total').classList.toggle('on', !daily);
+    el('rankMode_daily').classList.toggle('on', daily);
+    el('rankTabs').classList.toggle('hidden', daily);
+    el('rankLegend').classList.toggle('hidden', daily);
     ['score', 'solved', 'solutions'].forEach(function (k) { el('rankTab_' + k).classList.toggle('on', k === rankSort); });
     var me = TP.loadName(store);
     el('rankMe').textContent = me ? 'ニックネーム：' + me : '';
+    if (daily) { renderDailyRank(me); return; }
     if (!rankRows) return;
     if (!rankRows.length) { el('rankList').innerHTML = '<p class="rankMsg">まだ登録がありません。<br>最初の1位をねらおう！</p>'; return; }
     var html = '';
@@ -2197,9 +2469,72 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     });
     el('rankList').innerHTML = html;
   }
+  function renderDailyRank(me) {
+    if (!rankDailyRows) return;
+    if (!rankDailyRows.length) { el('rankList').innerHTML = '<p class="rankMsg">今日はまだ登録がありません。<br>最初の1位をねらおう！</p>'; return; }
+    var html = '';
+    TP.sortDailyRows(rankDailyRows).forEach(function (r, i) {
+      var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '位';
+      var mine = me && r.name === me ? ' me' : '';
+      html += '<div class="rankItem' + mine + '"><span class="rankNo">' + medal + '</span><span class="rankName">' + esc(r.name) + '</span>' +
+        '<span class="rankVals"><span class="key"><b>' + r.dscore + '</b>点</span></span></div>';
+    });
+    el('rankList').innerHTML = html;
+  }
+  // v1.1：デイリーランキング。3組すべて終わっていれば登録（POST）してから、その日の一覧を取得（GET）。未完了なら見るだけ
+  function rankDailyLoad() {
+    var seq = ++rankSeq;
+    rankMode = 'daily';
+    rankDailyRows = null;
+    rankShow(true);
+    renderRank();
+    el('rankNote').textContent = '';
+    var note = el('rankDailyNote');
+    var date = todayJst(), keys = dailyKeys(date), sm = TP.dailySummary(dailyData, date, keys);
+    note.classList.remove('hidden');
+    note.textContent = date + '　あなたのデイリー：' + sm.done + '/' + sm.total + '組・' + sm.score + '点' + (sm.complete ? '' : '（3組すべて終わると登録できます）');
+    if (!TP.isRankingReady(rankingUrl)) {
+      el('rankList').innerHTML = '<p class="rankMsg">ランキングは準備中です。<br>（サーバー接続後に表示されます）</p>';
+      return Promise.resolve('notready');
+    }
+    var f = fetchFn();
+    if (!f) { el('rankList').innerHTML = '<p class="rankMsg ng">この環境では通信できません。</p>'; return Promise.resolve('nofetch'); }
+    var params = TP.dailyRankingParams(dailyData, date, keys, TP.loadName(store));
+    var posted = true, post;
+    if (params) {
+      el('rankList').innerHTML = '<p class="rankMsg">登録中…</p>';
+      try {
+        post = withTimeout(f(rankingUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: TP.encodeDailyParams(params) }), 9000)
+          .catch(function () { posted = false; });
+      } catch (err) { posted = false; post = Promise.resolve(); }
+    } else post = Promise.resolve();
+    return post.then(function () {
+      if (seq !== rankSeq) return 'stale';
+      el('rankList').innerHTML = '<p class="rankMsg">読み込み中…</p>';
+      return withTimeout(f(TP.dailyGetUrl(rankingUrl, date, Date.now()), { method: 'GET' }), 9000)
+        .then(function (res) { if (!res || (res.ok === false)) throw new Error('http'); return res.json(); })
+        .then(function (data) {
+          if (seq !== rankSeq) return 'stale';
+          var rows = TP.cleanDailyRows(data);
+          if (!rows) throw new Error('format');
+          rankDailyRows = rows;
+          renderRank();
+          el('rankNote').textContent = (posted ? '' : '※今回の記録は登録できませんでした。') + '上位' + TP.RANK_TOP + '件を表示しています';
+          return posted ? (params ? 'ok' : 'view-only') : 'post-failed';
+        })
+        .catch(function () {
+          if (seq !== rankSeq) return 'stale';
+          el('rankList').innerHTML = '<p class="rankMsg ng">ランキングを読み込めませんでした。<br>通信環境を確認して、もう一度開いてね。</p>';
+          el('rankNote').textContent = posted ? '' : '※記録の登録もできませんでした。';
+          return 'error';
+        });
+    });
+  }
   // 開いた時点で現在の数字を登録（POST）→ 一覧を取得（GET）。失敗してもゲーム本体には影響させない
   function rankSubmitAndLoad() {
     var seq = ++rankSeq;
+    rankMode = 'total';
+    el('rankDailyNote').classList.add('hidden');
     rankRows = null;
     rankShow(true);
     renderRank();
@@ -2249,8 +2584,16 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     rankRenaming = !!renaming;
   }
   var rankRenaming = false;
-  function openRanking() {
+  function dailyNeedsName() { var date = todayJst(); return dailySum(date).complete && !TP.loadName(store); }
+  function openRanking(mode) {
     el('rankOverlay').classList.remove('hidden');
+    if (mode === 'daily') {
+      rankMode = 'daily';
+      if (dailyNeedsName()) { rankAskName(false); return Promise.resolve('askname'); }
+      return rankDailyLoad();
+    }
+    rankMode = 'total';
+    el('rankDailyNote').classList.add('hidden');
     if (!TP.loadName(store)) { rankAskName(false); return Promise.resolve('askname'); }
     return rankSubmitAndLoad();
   }
@@ -2258,7 +2601,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     var n = TP.cleanName(el('rankNameInput').value);
     if (!n) { el('rankNameMsg').textContent = 'ニックネームを入れてね'; return Promise.resolve('empty'); }
     if (!TP.saveName(store, n)) { el('rankNameMsg').textContent = 'この端末に保存できませんでした'; return Promise.resolve('savefail'); }
-    return rankSubmitAndLoad();
+    return rankMode === 'daily' ? rankDailyLoad() : rankSubmitAndLoad();
   }
   function closeRanking() { rankSeq++; el('rankOverlay').classList.add('hidden'); }
   if (el('rankOverlay')) {
@@ -2270,6 +2613,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     ['score', 'solved', 'solutions'].forEach(function (k) {
       el('rankTab_' + k).addEventListener('click', function () { rankSort = k; renderRank(); });
     });
+    el('rankMode_total').addEventListener('click', function () { if (rankMode !== 'total') openRanking('total'); });
+    el('rankMode_daily').addEventListener('click', function () { if (rankMode !== 'daily') openRanking('daily'); });
   }
 
   // テスト・デバッグ用の窓口
@@ -2277,7 +2622,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     handle: handle, render: render, POOL: POOL, exportText: exportText, importText: importText,
     getState: function () { return { readOnly: readOnly, conflict: conflict, saveWarn: saveWarn, tab: TAB_ID, boot: boot.status, lastRev: lastRev }; }, persist: persist,
     showTut: showTut, getTutIdx: function () { return tutIdx; },
-    openRanking: openRanking, rankNameOk: rankNameOk, rankSubmitAndLoad: rankSubmitAndLoad,
+    openRanking: openRanking, rankNameOk: rankNameOk, rankDailyLoad: rankDailyLoad, getRankMode: function () { return rankMode; }, setNow: function (f) { nowFn = f; }, getDaily: function () { return dailyData; }, todayJst: todayJst, rankSubmitAndLoad: rankSubmitAndLoad,
     setRankingUrl: function (u) { rankingUrl = u; }, getRankSort: function () { return rankSort; } };
   render();
 })();
