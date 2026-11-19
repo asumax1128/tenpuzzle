@@ -100,10 +100,10 @@ test('L06 開始：両者 ready でホストが「はじめる」→ match（no/
   const sb = await b.page.evaluate(([s, m]) => JSON.stringify(TP.versusSets(window.__TP_UI.POOL, s, m)), [room.match.seed, room.match.mode]); assert.strictEqual(sa, sb); assert.strictEqual(JSON.parse(sa).length, 5);
   assert.strictEqual(await a.page.locator('#ol-start').count(), 0); assert.strictEqual(await b.page.locator('#ol-ready').count(), 0, '開始後は準備ボタンを出さない');
 }));
-test('L07 開始の時点では result はまだ無い。部屋のキーは meta/players/match/rounds（＋4-4 の live）のみ。切断（onDisconnect）はまだ書かない', withRoom(['ホスト', 'ゲスト'], async ([a, b]) => {
+test('L07 開始の時点では result はまだ無い。部屋のキーは meta/players/match/rounds（＋4-4 の live）のみ。切断（onDisconnect）の登録は 4-5', withRoom(['ホスト', 'ゲスト'], async ([a, b]) => {
   const code = await createRoom(a); await joinRoom(b, code); await b.page.waitForSelector('#ol-code-big'); await a.page.click('#ol-ready'); await b.page.click('#ol-ready'); await a.page.waitForSelector('#ol-start:not([disabled])'); await a.page.click('#ol-start'); await b.page.waitForSelector('#vs-count, #vs-label');
   const room = await dbGet('games/tenpuzzle/rooms/' + code); Object.keys(room).forEach(k => assert(['match', 'meta', 'players', 'rounds', 'live'].indexOf(k) >= 0, k)); assert.strictEqual(room.rounds[0].result, undefined);
-  const html = fs.readFileSync(HTML, 'utf8'); assert(!/onDisconnect\s*\(/.test(html), 'onDisconnect は 4-5');
+  const html = fs.readFileSync(HTML, 'utf8'); assert(/onDisconnect\(\)\.update\(TP\.buildOfflineUpdate/.test(html), '4-5：onDisconnect で在席を書く');
 }));
 
 // ---------------- 拒否 ----------------

@@ -50,13 +50,14 @@ test('A03 BASE / TIERS は v0.9 と同一', () => { assert.deepStrictEqual(TP.BA
 test('A04 SAVE_VERSION(4) / SAVE_KEY / SETTINGS_KEY は不変', () => { assert.strictEqual(TP.SAVE_VERSION, 4); assert.strictEqual(TP.SAVE_VERSION, V09.TP.SAVE_VERSION); assert.strictEqual(TP.SAVE_KEY, V09.TP.SAVE_KEY); assert.strictEqual(TP.SETTINGS_KEY, 'tenpuzzle_settings_v1'); });
 test('A05 NEXT_MIX_RATE は 0.1（pickNext の10%分岐）', () => { assert.strictEqual(TP.NEXT_MIX_RATE, 0.1); assert.strictEqual(TP.NEXT_MIX_RATE, V09.TP.NEXT_MIX_RATE); });
 test('A06 v0.9 の公開関数は全て v1.0 にも存在', () => { Object.keys(V09.TP).forEach(k => assert(k in TP, k + ' がない')); });
-test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残っている。v1.1 から増えたのは 対戦 CORE（4-1）・ロビー CORE（4-3）・対戦本体 CORE（4-4）のみ', () => {
+test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残っている。v1.1 から増えたのは 対戦 CORE（4-1）・ロビー CORE（4-3）・対戦本体 CORE（4-4）・切断/再戦 CORE（4-5）のみ', () => {
   const added = Object.keys(TP).filter(k => !(k in V09.TP));
   ['BGM', 'PRAISE', 'celebrationFor', 'createBgm', 'praiseFor', 'dailySets', 'drawSets', 'loadDaily'].forEach(k => assert(added.indexOf(k) >= 0, k));
   const v41 = ['VERSUS', 'VERSUS_SLOTS', 'poolHash', 'suddenDeathSet', 'versusPoints', 'versusReduce', 'versusSets'];
   const v43 = ['LOBBY', 'buildCreateUpdate', 'buildJoinUpdate', 'buildStartUpdate', 'isRoomCode', 'joinCheck', 'leavePlan', 'lobbyName', 'lobbyStartPlan', 'lobbyView', 'makeMatchSeed', 'makeRoomCode', 'normalizeRoomCode', 'randomHex16'];
   const v44 = ['VS', 'verifySolveExpr', 'versusPlayers', 'versusResultUpdate', 'versusResults', 'versusSchedule', 'versusView', 'vsTiming'];
-  assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), v41.concat(v43, v44).sort());
+  const v45 = ['RESUME_KEY', 'buildOfflineUpdate', 'buildOnlineUpdate', 'encodeResume', 'parseResume', 'rematchPlan', 'rematchState'];
+  assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), v41.concat(v43, v44, v45).sort());
 });
 test('A08 問題プールは v0.9 と同一', () => { assert.deepStrictEqual(POOL, V09.pool); });
 test('A09 canon4：+ × の交換は同一視、− ÷ の向きは別', () => {
@@ -923,10 +924,10 @@ test('P01 CORE：v1.1 から消えた/変わった行は公開リスト末尾の
   const bset = new Set(core(V10.html).split('\n')); const removed = core(V11.html).split('\n').filter(l => !bset.has(l)).map(l => l.trim());
   assert.deepStrictEqual(removed, ['dailyGetUrl: dailyGetUrl, cleanDailyRows: cleanDailyRows, sortDailyRows: sortDailyRows']);
 });
-test('P02 CORE 以外：v1.1 から消えた/変わった行は 4-3 のテスト窓口（window.__TP_UI）の1行のみ。他は追加だけ（タイトル表記も v1.1 のまま）', () => {
+test('P02 CORE 以外：v1.1 から消えた/変わった行は「タイトルの版表記（v1.1→v1.2）」と 4-3 のテスト窓口（window.__TP_UI）の2行のみ。他は追加だけ', () => {
   const strip = h => h.replace(/\/\/ ===== CORE_START =====[\s\S]*?\/\/ ===== CORE_END =====/, '');
   const cur = new Set(strip(V10.html).split('\n')); const removed = strip(V11.html).split('\n').filter(l => !cur.has(l)).map(l => l.trim());
-  assert.deepStrictEqual(removed, ['window.__TP_UI = { bgm: bgm, ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },']); assert(/<title>テンパズル v1\.1<\/title>/.test(V10.html));
+  assert.deepStrictEqual(removed, ['<title>テンパズル v1.1</title>', 'window.__TP_UI = { bgm: bgm, ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },']); assert(/<title>テンパズル v1\.2<\/title>/.test(V10.html));
 });
 test('P03 v1.1 の公開関数は全て実装の文字列が同じ（ソロ・デイリー・ランキング・BGM・祝福を含む）。定数も同じ', () => {
   let nf = 0; Object.keys(V11.TP).forEach(k => { const a = V11.TP[k], b = TP[k]; if (typeof a === 'function') { nf++; assert.strictEqual(b.toString(), a.toString(), k); } else assert.deepStrictEqual(b, a, k); });
@@ -938,9 +939,9 @@ test('P04 ソロ・デイリーの動作は v1.1 と一致（solve 全組・dail
   const o = Math.random; try { Math.random = seeded(5); const a = []; for (let i = 0; i < 100; i++) a.push(TP.pickNext(POOL, TP.emptySave(), null)); Math.random = seeded(5); const b = []; for (let i = 0; i < 100; i++) b.push(V11.TP.pickNext(V11.pool, V11.TP.emptySave(), null)); assert.deepStrictEqual(a, b); } finally { Math.random = o; }
   assert.deepStrictEqual(TP.zukanSections(POOL, TP.emptySave()), V11.TP.zukanSections(V11.pool, V11.TP.emptySave()));
 });
-test('P05 問題プールは v1.1 と同一（poolHash も一致）。Firebase の SDK は静的に読み込まない（<script src> なし。入口を押したときに動的に読む）。切断（onDisconnect）・結果の書き込みはまだ無い', () => {
+test('P05 問題プールは v1.1 と同一（poolHash も一致）。Firebase の SDK は静的に読み込まない（<script src> なし。入口を押したときに動的に読む）。onDisconnect は 4-5 で入った', () => {
   assert.deepStrictEqual(POOL, V11.pool); assert.strictEqual(TP.poolHash(POOL), TP.poolHash(V11.pool));
-  assert(!/<script[^>]*src=[^>]*firebase/i.test(V10.html)); assert(!/<link[^>]*firebase/i.test(V10.html)); assert(!/onDisconnect\s*\(/.test(V10.html));
+  assert(!/<script[^>]*src=[^>]*firebase/i.test(V10.html)); assert(!/<link[^>]*firebase/i.test(V10.html)); assert(/onDisconnect\(\)\.update\(TP\.buildOfflineUpdate\(olTs\(\)\)\)/.test(V10.html), '4-5：onDisconnect で在席を書く');
   assert(/FB_SDK_BASE = 'https:\/\/www\.gstatic\.com\/firebasejs\//.test(V10.html));
 });
 test('P06 対戦 CORE は DOM・通信・時刻に触れない（localStorage / fetch / Date.now / document を参照しない）', () => {
@@ -1053,7 +1054,7 @@ const RS = (by, kind) => (kind === 'timeout' ? { kind: 'timeout' } : { by, kind:
 test('W01 対戦の定数はルールと一致（締切の猶予1000・次の開始5000・お手つき10000・ラウンド番号0〜7）。テスト用の短縮は roundMs だけ', () => {
   const rules = require('../firebase/tenpuzzle-rules.cjs');
   assert.strictEqual(TP.VS.ROUND_MS, rules.K.ROUND_MS); assert.strictEqual(TP.VS.GRACE_MS, rules.K.DEADLINE_GRACE_MS); assert.strictEqual(TP.VS.NEXT_START_MS, rules.K.NEXT_START_MS); assert.strictEqual(TP.VS.LOCK_MS, rules.K.WRONG_LOCK_MS); assert.strictEqual(TP.VS.MAX_ROUND_INDEX, rules.K.MAX_ROUND_INDEX);
-  assert.deepStrictEqual(TP.vsTiming(), { roundMs: 60000, graceMs: 1000, revealMs: 5000, nextStartMs: 5000, lockMs: 10000, marginMs: 300 });
+  assert.deepStrictEqual(TP.vsTiming(), { roundMs: 60000, graceMs: 1000, revealMs: 5000, nextStartMs: 5000, lockMs: 10000, marginMs: 300, forfeitMs: 30000 });
   assert.strictEqual(TP.vsTiming({ roundMs: 8000 }).roundMs, 8000); assert.strictEqual(TP.vsTiming({ roundMs: 8000, graceMs: 1 }).graceMs, 1000, '猶予は差し替えない'); assert.strictEqual(TP.vsTiming({ roundMs: -1 }).roundMs, 60000);
 });
 test('W02 参加者は [ホスト, ゲスト]。結果は rounds/0 から連続しているものだけ（抜けがあればそこまで）', () => {
@@ -1141,6 +1142,63 @@ test('W09 性質テスト（ランダムな結果列 3000 通り）：見え方�
 test('W10 対戦の CORE は DOM・通信・時刻・乱数・セーブに触れない（時刻は引数 serverNow だけ）', () => {
   const src = V10.html.match(/\/\/ ---------- v1\.2 分割 4-4：対戦本体[\s\S]*?\n  return \{\n    dict: dict,/)[0]; assert(src.length > 3000);
   assert(!/localStorage|fetch\(|Date\.now|document\.|window\.|Math\.random|firebase|crypto|persist\(|writeSave|\bsave\./i.test(src.replace(/\/\/[^\n]*/g, '')), '外部に触れている');
+});
+
+
+// ===================== X. 切断・再接続・再戦の CORE（v1.2 分割 4-5。通信なしの純関数） =====================
+const withPl = (room, patch) => { const r = JSON.parse(JSON.stringify(room)); Object.keys(patch).forEach(u => Object.assign(r.players[u], patch[u])); return r; };
+test('X01 在席の書き込みの形：切断・退出は online:false＋offlineAt、復帰は online:true＋offlineAt 削除（ルールの players 検証と一致）', () => {
+  const ts = { '.sv': 'timestamp' }; assert.deepStrictEqual(TP.buildOfflineUpdate(ts), { online: false, offlineAt: ts }); assert.deepStrictEqual(TP.buildOnlineUpdate(), { online: true, offlineAt: null });
+  const rules = require('../firebase/tenpuzzle-rules.cjs'); const pl = rules.rooms.$code.players.$uid; ['online', 'offlineAt'].forEach(k => assert(k in pl, k));
+  assert(/online'\)\.val\(\) === true && !newData\.child\('offlineAt'\)\.exists\(\)/.test(pl['.validate'])); assert(/online'\)\.val\(\) === false && newData\.child\('offlineAt'\)\.exists\(\)/.test(pl['.validate']));
+  assert(/newData\.val\(\) === now/.test(pl.offlineAt['.validate']), 'offlineAt はサーバー時刻（TIMESTAMP）');
+});
+test('X02 再接続の記録：encodeResume / parseResume の往復。壊れた値・コード不正・役割不正・uid なしは null', () => {
+  const raw = TP.encodeResume('WXYZ', 'host', 'U1'); assert.deepStrictEqual(TP.parseResume(raw), { code: 'WXYZ', role: 'host', uid: 'U1' }); assert.deepStrictEqual(TP.parseResume(TP.encodeResume('ABCD', 'x', 'U2')), { code: 'ABCD', role: 'guest', uid: 'U2' });
+  [null, '', '{broken', '[]', '"x"', JSON.stringify({ code: 'abcd', role: 'host', uid: 'U' }), JSON.stringify({ code: 'AB0D', role: 'host', uid: 'U' }), JSON.stringify({ code: 'ABCD', role: 'spy', uid: 'U' }), JSON.stringify({ code: 'ABCD', role: 'host' }), JSON.stringify({ code: 'ABCD', role: 'host', uid: '' }), JSON.stringify({ code: 'ABCD', role: 'host', uid: 'x'.repeat(200) })].forEach(v => assert.strictEqual(TP.parseResume(v), null, String(v)));
+  assert.strictEqual(TP.RESUME_KEY, 'tenpuzzle_online_room');
+});
+test('X03 再戦の状態：終了後だけ押せる／片方だけ→待っている・のぞまれている／両者→ホストだけが始める／相手が部屋を出たら不可', () => {
+  const room = mkMatch(1, { results: [RS('A')], next: false }); room.players.A.rematch = false; room.players.B.rematch = false;
+  const st = (r, uid, fin) => TP.rematchState(r, uid, fin === undefined ? true : fin);
+  assert.strictEqual(st(room, 'A', false).canPress, false, '試合中は押せない'); assert.strictEqual(st(room, 'A').canPress, true);
+  let r = withPl(room, { B: { rematch: true } }); assert.strictEqual(st(r, 'B').waiting, true); assert.strictEqual(st(r, 'A').requested, true); assert.strictEqual(st(r, 'A').both, false); assert.strictEqual(st(r, 'A').shouldStart, false);
+  r = withPl(room, { A: { rematch: true }, B: { rematch: true } }); assert.strictEqual(st(r, 'A').shouldStart, true); assert.strictEqual(st(r, 'B').shouldStart, false, 'ゲストは始めない'); assert.strictEqual(st(r, 'A', false).shouldStart, false);
+  delete r.players.B; assert.strictEqual(st(r, 'A').oppGone, true); assert.strictEqual(st(r, 'A').canPress, false); assert.strictEqual(st(r, 'A').shouldStart, false);
+  assert.strictEqual(st(room, 'Z').canPress, false); assert.strictEqual(st(null, 'A').canPress, false);
+});
+test('X04 再戦の計画：同じモード・試合番号+1・新しい seed（<コード>:<16桁>:<no+1>）。組セットは前の試合と別', () => {
+  const room = mkMatch(3, { results: [] }); room.match.no = 4; const p1 = TP.rematchPlan(room, 'WXYZ', seeded(1)), p2 = TP.rematchPlan(room, 'WXYZ', seeded(2));
+  assert.strictEqual(p1.mode, 3); assert.strictEqual(p1.no, 5); assert(/^WXYZ:[0-9a-f]{16}:5$/.test(p1.seed)); assert.notStrictEqual(p1.seed, p2.seed); assert.notStrictEqual(p1.seed, room.match.seed);
+  let diff = 0; for (let k = 0; k < 200; k++) { const a = TP.rematchPlan(room, 'WXYZ', seeded(k + 10)); if (TP.versusSets(POOL, a.seed, 3).map(x => x.key).join() !== TP.versusSets(POOL, room.match.seed, 3).map(x => x.key).join()) diff++; } assert(diff >= 199, String(diff));
+  [[null, 'WXYZ'], [{ match: { mode: 2, no: 1 } }, 'WXYZ'], [{ match: { mode: 3 } }, 'WXYZ'], [room, 'ab']].forEach(([r, c]) => assert.strictEqual(TP.rematchPlan(r, c, seeded(1)), null));
+});
+test('X05 相手の切断の見え方：online=false のとき offlineAt から猶予（30秒）を数える。猶予＋余裕を過ぎたら forfeitDue。復帰・終了後は出ない。猶予は timing.forfeitMs で短縮できる', () => {
+  const base = mkMatch(3); let r = withPl(base, { B: { online: false, offlineAt: 12000 } });
+  let v = TP.versusView(r, 'A', POOL, 20000); assert.strictEqual(v.oppOffline.leftMs, 22000); assert.strictEqual(v.oppOffline.forfeitDue, false);
+  v = TP.versusView(r, 'A', POOL, 42000); assert.strictEqual(v.oppOffline.leftMs, 0); assert.strictEqual(v.oppOffline.forfeitDue, false, '猶予ちょうどでは書かない（余裕 0.3 秒）'); v = TP.versusView(r, 'A', POOL, 42300); assert.strictEqual(v.oppOffline.forfeitDue, true);
+  v = TP.versusView(r, 'A', POOL, 20000, { forfeitMs: 4000 }); assert.strictEqual(v.oppOffline.leftMs, 0); assert.strictEqual(v.oppOffline.forfeitDue, true);
+  assert.strictEqual(TP.versusView(base, 'A', POOL, 20000).oppOffline, null); assert.strictEqual(TP.versusView(withPl(base, { B: { online: true } }), 'A', POOL, 20000).oppOffline, null);
+  assert.strictEqual(TP.versusView(r, 'B', POOL, 20000).oppOffline, null, '自分の切断は相手の表示にだけ出る（B から見た A は online）');
+  assert.strictEqual(TP.versusView(withPl(mkMatch(1, { results: [RS('A')], next: false }), { B: { online: false, offlineAt: 1 } }), 'A', POOL, 999999).oppOffline, undefined, '終了後は出ない');
+  assert.strictEqual(TP.versusView(withPl(base, { B: { online: false } }), 'A', POOL, 20000).oppOffline, null, 'offlineAt が無ければ数えない');
+});
+test('X06 不戦勝：forfeit の結果は次の startAt を書かず、reducer が試合を終える。勝者・敗者の見え方、開示、一覧が一致', () => {
+  const ts = { '.sv': 'timestamp' }; const room = mkMatch(3, { results: [RS('A')] });
+  const u = TP.versusResultUpdate(room, POOL, 1, { kind: 'forfeit', by: 'B' }, 99999, ts); assert.deepStrictEqual(u, { 'rounds/1/result': { kind: 'forfeit', at: ts, by: 'B' } });
+  const after = mkMatch(3, { results: [RS('A'), { by: 'B', kind: 'forfeit' }], next: false }); after.rounds[0] = Object.assign({ startAt: 10000 }, after.rounds[0]);
+  const vb = TP.versusView(after, 'B', POOL, 999999), va = TP.versusView(after, 'A', POOL, 999999); assert.strictEqual(vb.outcome, 'win'); assert.strictEqual(va.outcome, 'lose'); assert.strictEqual(vb.state.endedBy, 'forfeit'); assert.deepStrictEqual(va.scores, [1, 0]);
+  assert.strictEqual(vb.rows[1].kind, 'forfeit'); assert.strictEqual(vb.rows[1].pts, 0); const rv = TP.versusView(after, 'B', POOL, after.rounds[1].result.at + 1000); assert.strictEqual(rv.phase, 'reveal'); assert.strictEqual(rv.reveal.kind, 'forfeit'); assert.strictEqual(rv.reveal.mine, true);
+  assert.strictEqual(TP.versusResultUpdate(room, POOL, 1, { kind: 'forfeit', by: 'Z' }, 0, ts), null);
+  const rules = require('../firebase/tenpuzzle-rules.cjs'); assert.strictEqual(rules.K.FORFEIT_GRACE_MS, TP.VS.FORFEIT_GRACE_MS);
+});
+test('X07 ロビー：players に rematch が出る。相手が切断中は開始できない（canStart）', () => {
+  const room = mkRoom({ players: [['A', 'あ', true], ['B', 'い', true]], match: { mode: 3 } }); room.players.B.rematch = true; const v = TP.lobbyView(room, 'A'); assert.strictEqual(v.other.rematch, true); assert.strictEqual(v.me.rematch, false); assert.strictEqual(v.canStart, true);
+  room.players.B.online = false; room.players.B.offlineAt = 5; assert.strictEqual(TP.lobbyView(room, 'A').canStart, false); assert.strictEqual(TP.lobbyView(room, 'A').other.online, false);
+});
+test('X08 4-5 の CORE は DOM・通信・時刻・乱数・ストレージに触れない', () => {
+  const src = V10.html.match(/\/\/ ---------- v1\.2 分割 4-5：切断・再接続・再戦[\s\S]*?\n  return \{\n    dict: dict,/)[0]; assert(src.length > 1500);
+  assert(!/localStorage|sessionStorage|fetch\(|Date\.now|document\.|window\.|Math\.random|firebase|crypto/i.test(src.replace(/\/\/[^\n]*/g, '')), '外部に触れている');
 });
 
 // ===================== F. ブラウザ（Playwright）：配線・設定画面・結果画面の描画 =====================
@@ -1272,7 +1330,7 @@ if (!pw) {
     const errs = []; page.on('pageerror', e => errs.push(String(e))); await page.goto('file://' + F10); await showResult(page, 'solve', 'single');
     assert.strictEqual(await page.locator('#r-gstamp').count(), 1); assert.deepStrictEqual(errs, []); await ctx.close();
   });
-  test('F17 タイトルが v1.1', () => { assert(/<title>テンパズル v1\.1<\/title>/.test(V10.html)); });
+  test('F17 タイトルが v1.2', () => { assert(/<title>テンパズル v1\.2<\/title>/.test(V10.html)); });
   test('F18 AudioContext 非対応端末でもBGMを押して例外にならない', async () => {
     const ctx = await browser.newContext({ viewport: { width: 420, height: 800 } }); const page = await ctx.newPage();
     await page.addInitScript('window.AudioContext=undefined;window.webkitAudioContext=undefined;');

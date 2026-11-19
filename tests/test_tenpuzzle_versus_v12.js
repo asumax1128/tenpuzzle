@@ -11,10 +11,12 @@ const fragment = require('../firebase/tenpuzzle-rules.cjs');
 const HTML = path.join(__dirname, '..', 'prototype-tenpuzzle-v12.html');
 const NS = 'demo-tp-lobby', DB = 'http://127.0.0.1:9000';
 const SDK = path.join(__dirname, '..', 'node_modules', 'firebase');
-const ROUND_MS = 8000;
-const TEST_RULES = JSON.stringify(fragment).split('61000').join(String(ROUND_MS + 1000));
+const ROUND_MS = 8000, FORFEIT_MS = 6000;
+// テスト用のルールの写し：締切の定数 61000→9000、切断の猶予の定数 30000→6000 だけを置き換える（それ以外は本番のルールと同一：V00 で確認）
+const GRACE_EXPR = "offlineAt').val() + 30000";
+const TEST_RULES = JSON.stringify(fragment).split('61000').join(String(ROUND_MS + 1000)).split(GRACE_EXPR).join("offlineAt').val() + " + FORFEIT_MS);
 const TEST_CFG = { config: { apiKey: 'fake-api-key', authDomain: 'localhost', databaseURL: 'https://' + NS + '.firebaseio.com', projectId: NS, appId: '1:1:web:1' },
-  emulator: { auth: 'http://127.0.0.1:9099', dbHost: '127.0.0.1', dbPort: 9000 }, timing: { roundMs: ROUND_MS } };
+  emulator: { auth: 'http://127.0.0.1:9099', dbHost: '127.0.0.1', dbPort: 9000 }, timing: { roundMs: ROUND_MS, forfeitMs: FORFEIT_MS } };
 // CORE（Node 側で組セットを先に計算するため）
 const H = fs.readFileSync(HTML, 'utf8');
 const TP = (() => { const m = H.match(/\/\/ ===== CORE_START =====([\s\S]*?)\/\/ ===== CORE_END =====/); const mod = { exports: {} }; new Function('module', m[1])(mod); return mod.exports; })();
@@ -83,9 +85,11 @@ const withPlayers = (names, fn, opts) => async () => {
 };
 
 // ---------------- 準備 ----------------
-test('V00 テスト用のルールは、締切の定数（61000→9000）を置き換えただけで firebase/tenpuzzle-rules.cjs と同一', () => {
-  assert.strictEqual(TEST_RULES.split(String(ROUND_MS + 1000)).join('61000'), JSON.stringify(fragment)); assert.strictEqual((JSON.stringify(fragment).match(/61000/g) || []).length, 24);
-  assert(!JSON.stringify(fragment).includes(String(ROUND_MS + 1000)));
+test('V00 テスト用のルールは、締切の定数（61000→9000）と切断の猶予の定数（30000→6000）を置き換えただけで firebase/tenpuzzle-rules.cjs と同一', () => {
+  const real = JSON.stringify(fragment);
+  assert.strictEqual(TEST_RULES.split(String(ROUND_MS + 1000)).join('61000').split("offlineAt').val() + " + FORFEIT_MS).join(GRACE_EXPR), real);
+  assert.strictEqual((real.match(/61000/g) || []).length, 24); assert.strictEqual(real.split(GRACE_EXPR).length - 1, 8);
+  assert(!real.includes(String(ROUND_MS + 1000))); assert(!real.includes("offlineAt').val() + " + FORFEIT_MS));
 });
 
 // ---------------- フル試合 ----------------
@@ -206,6 +210,106 @@ test('S05 結果画面の「ロビーに戻る」：部屋から出てオンラ�
   const players = await dbGet('games/tenpuzzle/rooms/' + m.code + '/players'); assert(!players || !(aUid in players), 'A は部屋から出た');
   await b.page.waitForSelector('#ol-create', { timeout: 10000 }); // ホストが抜けた → ゲストも部屋をとじてメニューへ（4-3 の動作）
 }));
+
+// ================= 4-5：切断・不戦勝・再接続・再戦 =================
+const uidOf = (p) => p.page.evaluate(() => window.__TP_UI.OL.uid);
+const roomOf = (code) => dbGet('games/tenpuzzle/rooms/' + code);
+async function waitOffline(p, ms) { await p.page.waitForSelector('#vs-offline', { timeout: ms || 15000 }); }
+async function reducerOf(code) {
+  const room = await roomOf(code); const pl = [room.meta.host, room.meta.guest]; const res = []; for (let i = 0; i < 8 && room.rounds[i] && room.rounds[i].result; i++) res.push(room.rounds[i].result);
+  const sets = TP.versusSchedule(POOL, room.match.seed, room.match.mode, Math.max(room.match.mode, res.length + 1)); return TP.versusReduce({ mode: room.match.mode, players: pl, plan: sets.slice(0, room.match.mode).map(x => x.pts) }, res);
+}
+
+test('D01 試合中に片方のタブを閉じる → 相手画面に切断表示と猶予カウントダウン → 猶予（テストでは6秒）後に不戦勝が成立。残った側は勝ち、結果が versusReduce と一致', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 3); await waitPlay(a, 0); await waitPlay(b, 0);
+  const bUid = await uidOf(b), aUid = await uidOf(a); await b.page.close();
+  await waitOffline(a); const t0 = await a.page.evaluate(() => Number(document.querySelector('#vs-offline-sec').textContent)); assert(t0 >= 1 && t0 <= 6, '猶予カウントダウン ' + t0);
+  assert((await text(a, '#vs-offline')).includes('相手の接続が切れました'));
+  const off = await roomOf(m.code); assert.strictEqual(off.players[bUid].online, false); assert.strictEqual(typeof off.players[bUid].offlineAt, 'number');
+  await waitFinished(a, 25000); const va = await view(a); assert.strictEqual(va.outcome, 'win'); assert.strictEqual(va.endedBy, 'forfeit');
+  assert((await text(a, '#vs-final-note')).includes('不戦勝'));
+  const room = await roomOf(m.code); assert.strictEqual(room.rounds[0].result.kind, 'forfeit'); assert.strictEqual(room.rounds[0].result.by, aUid); assert.strictEqual(room.rounds[1], undefined, '不戦勝のあとに次の startAt は書かない');
+  const st = await reducerOf(m.code); assert.strictEqual(st.winner, aUid); assert.strictEqual(st.endedBy, 'forfeit'); assert.deepStrictEqual(va.scores, st.scores);
+}));
+test('D02 猶予内に開き直すと、同じ部屋・同じ試合に復帰して対戦が続く（B が about:blank に移って戻る）。相手の切断表示は消え、在席は online:true に戻る', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 1); await waitPlay(a, 0); await waitPlay(b, 0); const bUid = await uidOf(b);
+  await b.page.goto('about:blank'); await waitOffline(a);
+  await b.page.goto('file://' + HTML); await b.page.waitForFunction(() => !!window.__TP_UI); await waitPlay(b, 0, 15000);
+  await a.page.waitForFunction(() => !document.querySelector('#vs-offline'), null, { timeout: 8000 });
+  const room = await roomOf(m.code); assert.strictEqual(room.players[bUid].online, true); assert.strictEqual(room.players[bUid].offlineAt, undefined); assert.strictEqual(await uidOf(b), bUid, '同じ uid（匿名認証が端末に保たれる）');
+  assert.strictEqual((await view(b)).label, '第1問 / 1'); assert.strictEqual(room.rounds[0].result, undefined, '不戦勝は成立していない');
+  await solveRound(b, m.sets, 0); await waitFinished(a); await waitFinished(b); const [va] = await bothConsistent(a, b); assert.strictEqual(va.outcome, 'lose'); assert.strictEqual(va.endedBy, 'score');
+}));
+test('D03 試合途中の退出ボタン：確認ダイアログ →「つづける」で戻る →「やめる」で自分の online:false＋offlineAt を書いて部屋を出る → 相手に不戦勝が成立', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 3); await waitPlay(a, 0); await waitPlay(b, 0); const bUid = await uidOf(b);
+  await b.page.click('#vs-quit'); await b.page.waitForSelector('#vs-confirm'); assert((await text(b, '#vs-confirm')).includes('不戦勝'));
+  await b.page.click('#vs-quit-no'); await b.page.waitForFunction(() => !document.querySelector('#vs-confirm')); assert.strictEqual(await b.page.locator('#vs-label').count(), 1, '対戦に戻る');
+  assert.strictEqual((await roomOf(m.code)).players[bUid].online, true);
+  await b.page.click('#vs-quit'); await b.page.click('#vs-quit-yes'); await b.page.waitForSelector('#ol-create');
+  const room = await roomOf(m.code); assert.strictEqual(room.players[bUid].online, false); assert.strictEqual(typeof room.players[bUid].offlineAt, 'number'); assert(bUid in room.players, '相手が不戦勝を請求できるよう players は消さない');
+  assert.strictEqual(await b.page.evaluate(() => sessionStorage.getItem('tenpuzzle_online_room')), null, '自分から出たので自動で戻らない');
+  await waitOffline(a); await waitFinished(a, 25000); const va = await view(a); assert.strictEqual(va.outcome, 'win'); assert.strictEqual(va.endedBy, 'forfeit');
+  const st = await reducerOf(m.code); assert.strictEqual(st.endedBy, 'forfeit'); assert.deepStrictEqual(va.scores, st.scores);
+}));
+test('D04 在席の書き込み：参加中は online:true・offlineAt なし。タブを閉じるとサーバー時刻の offlineAt つきで online:false（onDisconnect がルールを通る形）', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 3); await waitPlay(a, 0); const bUid = await uidOf(b);
+  let room = await roomOf(m.code); assert.strictEqual(room.players[bUid].online, true); assert.strictEqual(room.players[bUid].offlineAt, undefined);
+  const before = Date.now(); await b.page.close(); await waitOffline(a);
+  room = await roomOf(m.code); assert.strictEqual(room.players[bUid].online, false); assert(Math.abs(room.players[bUid].offlineAt - before) < 10000, 'offlineAt はサーバー時刻（TIMESTAMP）');
+}));
+test('D05 切断中の相手には試合を始められない（ロビー）：ロビーで B が切断 → A の画面に切断表示、「はじめる」は無効', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  await openOnline(a); await a.page.click('#ol-create'); await a.page.waitForSelector('#ol-code-big'); const code = (await text(a, '#ol-code-big')).trim();
+  await openOnline(b); await b.page.click('#ol-join-open'); await b.page.fill('#ol-code', code); await b.page.click('#ol-join'); await b.page.waitForSelector('#ol-code-big');
+  await a.page.click('#ol-ready'); await b.page.click('#ol-ready'); await a.page.waitForSelector('#ol-start:not([disabled])');
+  await b.page.close(); await a.page.waitForSelector('#ol-offline', { timeout: 10000 }); assert.strictEqual(await a.page.locator('#ol-start[disabled]').count(), 1);
+}));
+test('R01 再戦：両者が「もう一局」→ ホストが rounds を一括削除し、新しい seed・試合番号+1 で次の試合が始まる。組セットは前の試合と違う。スコアはリセット、rematch フラグは下りる', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 1); await waitPlay(a, 0); await solveRound(a, m.sets, 0); await waitFinished(a); await waitFinished(b);
+  const next = 'f'.repeat(16); await a.page.evaluate(h => { window.__TP_FB_TEST__.rematchSeedHex = h; }, next);
+  await a.page.click('#vs-rematch'); await b.page.waitForSelector('#vs-rematch-note'); assert((await text(b, '#vs-rematch-note')).includes('のぞんでいます')); assert((await text(a, '#vs-rematch-note')).includes('待っています'));
+  await b.page.click('#vs-rematch');
+  await waitPlay(a, 0, 20000); await waitPlay(b, 0, 20000);
+  const room = await roomOf(m.code); assert.strictEqual(room.match.no, 2); assert.strictEqual(room.match.seed, m.code + ':' + next + ':2'); assert.notStrictEqual(room.match.seed, m.seed); assert.strictEqual(room.match.mode, 1);
+  assert.deepStrictEqual(Object.keys(room.rounds[0]), ['startAt']); assert.strictEqual(room.rounds[1], undefined);
+  const newSets = TP.versusSets(POOL, room.match.seed, 1); assert.notStrictEqual(newSets[0].key, m.sets[0].key, '組が前の試合と違う');
+  const va = await view(a), vb = await view(b); assert.deepStrictEqual(va.scores, [0, 0]); assert.deepStrictEqual(vb.scores, [0, 0]);
+  assert.strictEqual(await a.page.evaluate(() => window.__TP_UI.vsView().round.key), newSets[0].key); assert.strictEqual(await b.page.evaluate(() => window.__TP_UI.vsView().round.key), newSets[0].key);
+  await a.page.waitForFunction(() => window.__TP_UI.OL.room.players && Object.values(window.__TP_UI.OL.room.players).every(p => p.rematch === false), null, { timeout: 8000 });
+  await solveRound(b, newSets, 0); await waitFinished(a); await waitFinished(b); const [fa] = await bothConsistent(a, b); assert.strictEqual(fa.outcome, 'lose', '2試合目もフルに遊べる');
+}));
+test('R02 片方だけが「もう一局」を押しても始まらない（待っている側に「相手の応答を待っています」、相手側に「のぞんでいます」）。取り消しもできる', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 1); await waitPlay(a, 0); await solveRound(a, m.sets, 0); await waitFinished(a); await waitFinished(b);
+  await b.page.click('#vs-rematch'); await a.page.waitForSelector('#vs-rematch-note'); assert((await text(a, '#vs-rematch-note')).includes('のぞんでいます')); await a.page.waitForTimeout(1500);
+  let room = await roomOf(m.code); assert.strictEqual(room.match.no, 1); assert(room.rounds[0].result, '前の試合の結果は残っている'); assert.strictEqual(await a.page.locator('#vs-final').count(), 1);
+  await b.page.click('#vs-rematch'); await a.page.waitForFunction(() => !document.querySelector('#vs-rematch-note')); room = await roomOf(m.code); assert.strictEqual(Object.values(room.players).filter(p => p.rematch).length, 0);
+}));
+test('R03 どちらかが「ロビーに戻る」を選ぶと再戦は成立しない：ゲストが出る → ホストの画面に「相手が部屋を出ました」・「もう一局」は出ない', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 1); await waitPlay(a, 0); await solveRound(a, m.sets, 0); await waitFinished(a); await waitFinished(b);
+  await a.page.click('#vs-rematch'); await b.page.click('#vs-lobby'); await b.page.waitForSelector('#ol-create');
+  await a.page.waitForSelector('#vs-rematch-note'); assert((await text(a, '#vs-rematch-note')).includes('部屋を出ました')); assert.strictEqual(await a.page.locator('#vs-rematch').count(), 0);
+  await a.page.waitForTimeout(1200); const room = await roomOf(m.code); assert.strictEqual(room.match.no, 1); assert(room.rounds[0].result);
+}));
+test('U01 再読み込みで同じ部屋に戻る：出題中・結果画面のどちらも正しい画面に復帰（sessionStorage の部屋コード・役割・uid）', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 1); await waitPlay(a, 0); await waitPlay(b, 0);
+  const saved = JSON.parse(await b.page.evaluate(() => sessionStorage.getItem('tenpuzzle_online_room'))); assert.strictEqual(saved.code, m.code); assert.strictEqual(saved.role, 'guest'); assert.strictEqual(saved.uid, await uidOf(b));
+  await b.page.reload(); await b.page.waitForFunction(() => !!window.__TP_UI); await waitPlay(b, 0, 15000); assert.strictEqual((await view(b)).label, '第1問 / 1'); assert.strictEqual(await uidOf(b), saved.uid);
+  await solveRound(a, m.sets, 0); await waitFinished(a); await waitFinished(b);
+  await b.page.reload(); await b.page.waitForFunction(() => !!window.__TP_UI); await b.page.waitForSelector('#vs-final', { timeout: 15000 }); assert.strictEqual((await view(b)).outcome, 'lose'); assert.strictEqual(await b.page.locator('#vs-rematch').count(), 1);
+}));
+test('U02 戻れなかった場合（部屋が消えている）はオンラインのメニューに戻り、自動で戻る記録は消える', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 3); await waitPlay(a, 0); await waitPlay(b, 0);
+  await a.page.close(); await dbPut('games/tenpuzzle/rooms/' + m.code, null);
+  await b.page.reload(); await b.page.waitForFunction(() => !!window.__TP_UI); await b.page.waitForSelector('#ol-create', { timeout: 15000 });
+  assert((await text(b, '#ol-msg')).includes('もどれませんでした')); assert.strictEqual(await b.page.evaluate(() => sessionStorage.getItem('tenpuzzle_online_room')), null);
+}));
+test('U03 ソロの起動は影響を受けない：記録が壊れている・オンライン未使用なら、再読み込みしてもタイトルのまま', async () => {
+  const p = await player({ name: 'ひとり' });
+  try { await p.page.evaluate(() => sessionStorage.setItem('tenpuzzle_online_room', '{broken')); await p.page.reload(); await p.page.waitForFunction(() => !!window.__TP_UI); assert.strictEqual(await p.page.evaluate(() => window.__TP_UI.ui.screen), 'title'); assert.strictEqual(await p.page.evaluate(() => sessionStorage.getItem('tenpuzzle_online_room')), null);
+    await p.page.reload(); await p.page.waitForFunction(() => !!window.__TP_UI); assert.strictEqual(await p.page.evaluate(() => window.__TP_UI.ui.screen), 'title'); } finally { await closeAll([p]); }
+});
+test('U04 版表記は v1.2（タイトルと <title>）', async () => {
+  assert(/<title>テンパズル v1\.2<\/title>/.test(H));
+});
 
 (async () => {
   await setRules(TEST_RULES); browser = await chromium.launch();
