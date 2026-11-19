@@ -363,7 +363,7 @@ test('E02 CORE 以外：v0.9 から消えた/変わった行は、バージョ�
   removed.forEach(l => assert(allowedRe.some(r => r.test(l)), '想定外の変更: ' + l));
   assert(removed.length <= 16, '変更行が多すぎる: ' + removed.length);
 });
-test('E03 v0.9 ファイルは残っており、v0.9 のままタイトルが v0.9（index.html は公開中の v1.0）', () => { assert(/<title>テンパズル v0\.9<\/title>/.test(V09.html)); assert.strictEqual(V10OLD.html, fs.readFileSync(path.join(root, 'index.html'), 'utf8'), '公開中の index.html は v1.0'); });
+test('E03 v0.9 ファイルは残っており、v0.9 のままタイトルが v0.9（index.html は公開中の v1.1）', () => { assert(/<title>テンパズル v0\.9<\/title>/.test(V09.html)); assert.strictEqual(V10.html, fs.readFileSync(path.join(root, 'index.html'), 'utf8'), '公開中の index.html は v1.1'); });
 
 const KNOWN_NONCORE_CHANGES = [
   '<title>テンパズル v1.0</title>',
@@ -968,7 +968,7 @@ if (!pw) {
   test('J10 再読み込みしても進捗・点・状態が残る', async () => {
     const p = await pageAt(DS); try {
       await p.page.click('#dailyBtnTitle'); await p.page.click('.dcard[data-slot="1"]'); await solveCurrent(p.page); const pts = await p.page.evaluate(() => window.__TP_UI.ui.result.attempt);
-      await p.page.reload(); await p.page.waitForSelector('#app'); await p.page.evaluate(ms => { window.__TP_UI.setNow(() => ms); window.__TP_UI.handle('title'); }, noonMs(DS));
+      await p.page.reload(); await p.page.waitForFunction(() => !!window.__TP_UI); await p.page.evaluate(ms => { window.__TP_UI.setNow(() => ms); window.__TP_UI.handle('title'); }, noonMs(DS));
       assert.strictEqual((await p.page.locator('#t-daily-n').innerText()).trim(), '1/3'); await p.page.click('#dailyBtnTitle');
       const cs = await dailyCards(p.page); assert.strictEqual(cs[0].st, 'クリア'); assert.strictEqual(cs[0].pts, '+' + pts + '点'); assert.deepStrictEqual(p.errs, []);
     } finally { await p.ctx.close(); }
