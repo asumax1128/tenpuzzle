@@ -7,7 +7,8 @@
     "test:prepare": "node tests/test_tenpuzzle_prepare_rules_v12.js",
     "test:solo": "node tests/test_tenpuzzle_v12.js",
     "test:candidate": "firebase emulators:exec --only database --project demo-tenpuzzle \"node tests/test_tenpuzzle_candidate_v12.js\"",
-    "test:lobby": "firebase emulators:exec --only auth,database --project demo-tp-lobby \"node tests/test_tenpuzzle_lobby_v12.js\""
+    "test:lobby": "firebase emulators:exec --only auth,database --project demo-tp-lobby \"node tests/test_tenpuzzle_lobby_v12.js\"",
+    "test:versus": "firebase emulators:exec --only auth,database --project demo-tp-lobby \"node tests/test_tenpuzzle_versus_v12.js\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "3.0.4",

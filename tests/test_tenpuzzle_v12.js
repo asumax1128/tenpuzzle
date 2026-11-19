@@ -50,12 +50,13 @@ test('A03 BASE / TIERS は v0.9 と同一', () => { assert.deepStrictEqual(TP.BA
 test('A04 SAVE_VERSION(4) / SAVE_KEY / SETTINGS_KEY は不変', () => { assert.strictEqual(TP.SAVE_VERSION, 4); assert.strictEqual(TP.SAVE_VERSION, V09.TP.SAVE_VERSION); assert.strictEqual(TP.SAVE_KEY, V09.TP.SAVE_KEY); assert.strictEqual(TP.SETTINGS_KEY, 'tenpuzzle_settings_v1'); });
 test('A05 NEXT_MIX_RATE は 0.1（pickNext の10%分岐）', () => { assert.strictEqual(TP.NEXT_MIX_RATE, 0.1); assert.strictEqual(TP.NEXT_MIX_RATE, V09.TP.NEXT_MIX_RATE); });
 test('A06 v0.9 の公開関数は全て v1.0 にも存在', () => { Object.keys(V09.TP).forEach(k => assert(k in TP, k + ' がない')); });
-test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残っている。v1.1 から増えたのは 対戦 CORE（4-1）とロビー CORE（4-3）のみ', () => {
+test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残っている。v1.1 から増えたのは 対戦 CORE（4-1）・ロビー CORE（4-3）・対戦本体 CORE（4-4）のみ', () => {
   const added = Object.keys(TP).filter(k => !(k in V09.TP));
   ['BGM', 'PRAISE', 'celebrationFor', 'createBgm', 'praiseFor', 'dailySets', 'drawSets', 'loadDaily'].forEach(k => assert(added.indexOf(k) >= 0, k));
   const v41 = ['VERSUS', 'VERSUS_SLOTS', 'poolHash', 'suddenDeathSet', 'versusPoints', 'versusReduce', 'versusSets'];
   const v43 = ['LOBBY', 'buildCreateUpdate', 'buildJoinUpdate', 'buildStartUpdate', 'isRoomCode', 'joinCheck', 'leavePlan', 'lobbyName', 'lobbyStartPlan', 'lobbyView', 'makeMatchSeed', 'makeRoomCode', 'normalizeRoomCode', 'randomHex16'];
-  assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), v41.concat(v43).sort());
+  const v44 = ['VS', 'verifySolveExpr', 'versusPlayers', 'versusResultUpdate', 'versusResults', 'versusSchedule', 'versusView', 'vsTiming'];
+  assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), v41.concat(v43, v44).sort());
 });
 test('A08 問題プールは v0.9 と同一', () => { assert.deepStrictEqual(POOL, V09.pool); });
 test('A09 canon4：+ × の交換は同一視、− ÷ の向きは別', () => {
@@ -1040,6 +1041,95 @@ test('Q13 ルールとの整合：作成・参加・開始の書き込みの形�
   Object.keys(create.meta).forEach(k => assert(k in code.meta, 'meta.' + k)); Object.keys(create['players/U']).forEach(k => assert(k in code.players.$uid, 'players.' + k)); assert(/hasChildren\(\['name', 'joinedAt', 'online', 'ready', 'rematch'\]\)/.test(code.players.$uid['.validate']));
   assert('guest' in code.meta); Object.keys(TP.buildStartUpdate({ mode: 3, no: 1, seed: 's' }, 1, 1).match).forEach(k => assert(k in code.match, 'match.' + k)); assert('startAt' in code.rounds['0']);
   assert.strictEqual(rules.K.FIRST_START_MS, TP.LOBBY.START_MS); assert.strictEqual(rules.ROOM_CODE_RE, '^[' + TP.LOBBY.CODE_CHARS + ']{4}$');
+});
+
+
+// ===================== W. 対戦本体の CORE（v1.2 分割 4-4。通信なしの純関数） =====================
+const SEEDW = 'WXYZ:0123456789abcdef:1';
+const mkMatch = (mode, o) => { o = o || {}; const room = { meta: { v: 1, host: 'A', guest: 'B', poolHash: HASH, createdAt: 1 }, players: { A: { name: 'あきら' }, B: { name: 'べにこ' } }, match: { no: 1, mode, seed: o.seed || SEEDW, countdownAt: 1 }, rounds: { 0: { startAt: 10000 } } };
+  (o.results || []).forEach((r, i) => { room.rounds[i] = room.rounds[i] || {}; room.rounds[i].result = Object.assign({ at: 20000 + i * 10000 }, r); if (o.next !== false) room.rounds[i + 1] = { startAt: 25000 + i * 10000 }; });
+  if (o.live) room.live = o.live; return room; };
+const RS = (by, kind) => (kind === 'timeout' ? { kind: 'timeout' } : { by, kind: kind || 'solve', expr: kind === 'declare' ? undefined : 'x' });
+test('W01 対戦の定数はルールと一致（締切の猶予1000・次の開始5000・お手つき10000・ラウンド番号0〜7）。テスト用の短縮は roundMs だけ', () => {
+  const rules = require('../firebase/tenpuzzle-rules.cjs');
+  assert.strictEqual(TP.VS.ROUND_MS, rules.K.ROUND_MS); assert.strictEqual(TP.VS.GRACE_MS, rules.K.DEADLINE_GRACE_MS); assert.strictEqual(TP.VS.NEXT_START_MS, rules.K.NEXT_START_MS); assert.strictEqual(TP.VS.LOCK_MS, rules.K.WRONG_LOCK_MS); assert.strictEqual(TP.VS.MAX_ROUND_INDEX, rules.K.MAX_ROUND_INDEX);
+  assert.deepStrictEqual(TP.vsTiming(), { roundMs: 60000, graceMs: 1000, revealMs: 5000, nextStartMs: 5000, lockMs: 10000, marginMs: 300 });
+  assert.strictEqual(TP.vsTiming({ roundMs: 8000 }).roundMs, 8000); assert.strictEqual(TP.vsTiming({ roundMs: 8000, graceMs: 1 }).graceMs, 1000, '猶予は差し替えない'); assert.strictEqual(TP.vsTiming({ roundMs: -1 }).roundMs, 60000);
+});
+test('W02 参加者は [ホスト, ゲスト]。結果は rounds/0 から連続しているものだけ（抜けがあればそこまで）', () => {
+  assert.deepStrictEqual(TP.versusPlayers(mkMatch(3)), ['A', 'B']); assert.strictEqual(TP.versusPlayers({ meta: { host: 'A' } }), null); assert.strictEqual(TP.versusPlayers({ meta: { host: 'A', guest: 'A' } }), null);
+  const r = mkMatch(3, { results: [RS('A'), RS('B')] }); assert.strictEqual(TP.versusResults(r).length, 2);
+  r.rounds[3] = { startAt: 1, result: RS('A') }; assert.strictEqual(TP.versusResults(r).length, 2, '2 が無ければ 3 は数えない'); assert.deepStrictEqual(TP.versusResults(null), []);
+});
+test('W03 出題の並び：本戦は versusSets と同じ。延長戦 n 回目は suddenDeathSet(seed, n, それまでの全組)。重複なし', () => {
+  [1, 3, 5].forEach(mode => { const s = TP.versusSchedule(POOL, SEEDW, mode, mode + 3); const main = TP.versusSets(POOL, SEEDW, mode);
+    assert.deepStrictEqual(s.slice(0, mode).map(x => x.key), main.map(x => x.key)); assert.deepStrictEqual(s.slice(0, mode).map(x => x.pts), main.map(x => x.pts));
+    const used = main.map(x => x.key); for (let n = 1; n <= 3; n++) { const sd = TP.suddenDeathSet(POOL, SEEDW, n, used); assert.strictEqual(s[mode + n - 1].key, sd.key); assert.strictEqual(s[mode + n - 1].n, n); assert.strictEqual(s[mode + n - 1].sudden, true); used.push(sd.key); }
+    assert.strictEqual(new Set(s.map(x => x.key)).size, s.length); });
+  assert.strictEqual(TP.versusSchedule(POOL, '', 3, 3), null);
+});
+test('W04 相手の式の検証：全ての解ける組の example（infix の表記）は検証を通る。数字違い・値違い・読めない式は理由つきで不合格', () => {
+  POOL.filter(e => e.solvable).forEach(e => { assert(TP.verifySolveExpr(e.example, e.digits).ok, e.example); assert(TP.verifySolveExpr(TP.infix(TP.parse(e.example)), e.digits).ok); });
+  const e = POOL.find(x => x.solvable && x.digits.join('') === '1114'); assert.deepStrictEqual(TP.verifySolveExpr('(1+1)×(1+3)', e.digits), { ok: false, reason: 'digits' });
+  const f = POOL.find(x => x.digits.join('') === '2448'); assert.deepStrictEqual(TP.verifySolveExpr('2+4+4+8', f.digits), { ok: false, reason: 'value' });
+  [null, '', '((', 'x'.repeat(65), 5, '1++1'].forEach(x => assert.strictEqual(TP.verifySolveExpr(x, e.digits).ok, false, String(x)));
+});
+test('W05 見え方の場面：開始前（カウントダウン）→ 出題中 → 時間切れ待ち（締切＋猶予＋余裕で timeoutDue）→ 開示 → 次の問題 → 終了', () => {
+  const T = { roundMs: 60000 }; let r = mkMatch(3);
+  assert.strictEqual(TP.versusView({ meta: r.meta }, 'A', POOL, 0).phase, 'none');
+  let v = TP.versusView(r, 'A', POOL, 9000, T); assert.strictEqual(v.phase, 'countdown'); assert.strictEqual(v.countdownMs, 1000); assert.strictEqual(v.round.label, '第1問 / 3');
+  v = TP.versusView(r, 'A', POOL, 10000, T); assert.strictEqual(v.phase, 'play'); assert.strictEqual(v.msLeft, 60000);
+  v = TP.versusView(r, 'A', POOL, 69999, T); assert.strictEqual(v.phase, 'play');
+  v = TP.versusView(r, 'A', POOL, 70000, T); assert.strictEqual(v.phase, 'overtime'); assert.strictEqual(v.timeoutDue, false);
+  v = TP.versusView(r, 'A', POOL, 71300, T); assert.strictEqual(v.timeoutDue, false); v = TP.versusView(r, 'A', POOL, 71301, T); assert.strictEqual(v.timeoutDue, true, '締切＋1000（ルールの猶予）＋300 を過ぎたら書きにいく');
+  r = mkMatch(3, { results: [RS('A')] }); v = TP.versusView(r, 'B', POOL, 22000); assert.strictEqual(v.phase, 'reveal'); assert.strictEqual(v.reveal.i, 0); assert.strictEqual(v.reveal.byName, 'あきら'); assert.strictEqual(v.reveal.pts, 1); assert.strictEqual(v.revealUntil, 25000);
+  v = TP.versusView(r, 'B', POOL, 25000); assert.strictEqual(v.phase, 'play'); assert.strictEqual(v.round.i, 1); assert.strictEqual(v.round.label, '第2問 / 3');
+  r = mkMatch(3, { results: [RS('A')], next: false }); assert.strictEqual(TP.versusView(r, 'A', POOL, 22000).phase, 'waiting');
+  r = mkMatch(1, { results: [RS('A')], next: false }); v = TP.versusView(r, 'A', POOL, 22000); assert.strictEqual(v.phase, 'reveal'); assert.strictEqual(v.finished, true);
+  v = TP.versusView(r, 'A', POOL, 25000); assert.strictEqual(v.phase, 'finished'); assert.strictEqual(v.outcome, 'win'); assert.strictEqual(TP.versusView(r, 'B', POOL, 25000).outcome, 'lose');
+  assert.strictEqual(TP.versusView(r, 'Z', POOL, 25000).outcome, null, '観戦者（参加者でない）');
+});
+test('W06 得点・勝敗・延長戦の表示：両方の視点で一致し、延長戦 n 回目は versusReduce の suddenN と一致。「作れません」は5組の本戦だけ', () => {
+  const r = mkMatch(3, { results: [RS('A'), RS('B'), RS('B'), RS(null, 'timeout'), RS(null, 'timeout')] }); // 1 対 5? → B 2+3=5, A 1 → B の勝ち
+  const va = TP.versusView(r, 'A', POOL, 99999), vb = TP.versusView(r, 'B', POOL, 99999); assert.deepStrictEqual(va.scores, vb.scores); assert.strictEqual(va.myScore, vb.oppScore); assert.strictEqual(vb.outcome, 'win');
+  const tie = mkMatch(3, { results: [RS('A'), RS('A'), RS('B')] }); let v = TP.versusView(tie, 'A', POOL, 41000); assert.strictEqual(v.round.label, '延長戦 1回目'); assert.strictEqual(v.round.n, v.state.suddenN); assert.strictEqual(v.canDeclare, false);
+  const tie2 = mkMatch(3, { results: [RS('A'), RS('A'), RS('B'), RS(null, 'timeout'), RS(null, 'timeout')] }); v = TP.versusView(tie2, 'B', POOL, 61000); assert.strictEqual(v.round.label, '延長戦 3回目'); assert.strictEqual(v.state.suddenN, 3);
+  [1, 3].forEach(m => assert.strictEqual(TP.versusView(mkMatch(m), 'A', POOL, 20000).canDeclare, false)); assert.strictEqual(TP.versusView(mkMatch(5), 'A', POOL, 20000).canDeclare, true);
+  const d = mkMatch(1, { results: [RS(null, 'timeout'), RS(null, 'timeout'), RS(null, 'timeout'), RS(null, 'timeout')], next: false }); v = TP.versusView(d, 'A', POOL, 999999); assert.strictEqual(v.outcome, 'draw'); assert.strictEqual(v.state.endedBy, 'drawLimit'); assert.strictEqual(v.rows.length, 4);
+});
+test('W07 結果の書き込み：試合が続くなら次の startAt=serverNow+5000 も同じ更新に。終わるなら付けない。今のラウンド以外・不正は null', () => {
+  const ts = { '.sv': 'timestamp' };
+  let u = TP.versusResultUpdate(mkMatch(3), POOL, 0, { kind: 'solve', by: 'A', expr: '1+1' }, 50000, ts);
+  assert.deepStrictEqual(u, { 'rounds/0/result': { kind: 'solve', at: ts, by: 'A', expr: '1+1' }, 'rounds/1/startAt': 55000 });
+  assert.strictEqual(TP.versusResultUpdate(mkMatch(3), POOL, 1, { kind: 'solve', by: 'A', expr: '1' }, 0, ts), null, '今のラウンドではない');
+  u = TP.versusResultUpdate(mkMatch(1), POOL, 0, { kind: 'solve', by: 'A', expr: 'x' }, 0, ts); assert.deepStrictEqual(Object.keys(u), ['rounds/0/result'], '1組で決着したら次の startAt は書かない');
+  u = TP.versusResultUpdate(mkMatch(1), POOL, 0, { kind: 'timeout' }, 100, ts); assert.deepStrictEqual(u, { 'rounds/0/result': { kind: 'timeout', at: ts }, 'rounds/1/startAt': 5100 }, '時間切れ（0-0）は延長戦へ。by・expr は付けない');
+  u = TP.versusResultUpdate(mkMatch(5), POOL, 0, { kind: 'declare', by: 'B' }, 0, ts); assert.deepStrictEqual(u['rounds/0/result'], { kind: 'declare', at: ts, by: 'B' });
+  const last = mkMatch(1, { results: [RS(null, 'timeout'), RS(null, 'timeout'), RS(null, 'timeout')] }); u = TP.versusResultUpdate(last, POOL, 3, { kind: 'timeout' }, 0, ts); assert.deepStrictEqual(Object.keys(u), ['rounds/3/result'], '3回目の延長戦の時間切れで引き分け → 次は無い');
+  const tie = mkMatch(3, { results: [RS('A'), RS('A')] }); u = TP.versusResultUpdate(tie, POOL, 2, { kind: 'solve', by: 'B', expr: 'x' }, 0, ts); assert('rounds/3/startAt' in u, '3-3 の同点 → 延長戦の開始時刻を書く');
+  assert.strictEqual(TP.versusResultUpdate(null, POOL, 0, { kind: 'timeout' }, 0, ts), null); assert.strictEqual(TP.versusResultUpdate(mkMatch(3), POOL, 0, { kind: 'win', by: 'A' }, 0, ts), null);
+  const rules = require('../firebase/tenpuzzle-rules.cjs'); ['by', 'kind', 'expr', 'at'].forEach(k => assert(k in rules.rooms.$code.rounds['0'].result, k));
+});
+test('W08 相手の残り枚数とお手つき：live.r が今のラウンドのときだけ枚数を使う。lockUntil から残り ms', () => {
+  let v = TP.versusView(mkMatch(3, { live: { B: { r: 0, cards: 2, lockUntil: 15000 }, A: { r: 0, cards: 4, lockUntil: 0 } } }), 'A', POOL, 12000); assert.strictEqual(v.oppCards, 2); assert.strictEqual(v.oppLockMs, 3000); assert.strictEqual(v.myLockMs, 0);
+  v = TP.versusView(mkMatch(3, { live: { B: { r: 5, cards: 1, lockUntil: 0 } } }), 'A', POOL, 12000); assert.strictEqual(v.oppCards, 4, '前のラウンドの値は使わない');
+  v = TP.versusView(mkMatch(3), 'A', POOL, 12000); assert.strictEqual(v.oppCards, 4); assert.strictEqual(v.oppLockMs, 0);
+});
+test('W09 性質テスト（ランダムな結果列 3000 通り）：見え方の得点・終了・延長戦の回数は versusReduce と一致し、両者の視点で整合する', () => {
+  const rnd = seeded(44);
+  for (let g = 0; g < 3000; g++) {
+    const mode = [1, 3, 5][g % 3], n = Math.floor(rnd() * (mode + 4)), res = [];
+    for (let i = 0; i < n; i++) { const x = rnd(); res.push(x < 0.4 ? RS('A') : x < 0.75 ? RS('B') : RS(null, 'timeout')); }
+    const room = mkMatch(mode, { results: res }); const va = TP.versusView(room, 'A', POOL, 1e12), vb = TP.versusView(room, 'B', POOL, 1e12);
+    const st = TP.versusReduce({ mode, players: ['A', 'B'], plan: TP.versusSets(POOL, SEEDW, mode).map(x => x.pts) }, res);
+    assert.deepStrictEqual(va.scores, st.scores); assert.strictEqual(va.finished, st.finished); assert.strictEqual(va.myScore, vb.oppScore);
+    if (!st.finished) { assert.strictEqual(va.round.i, st.next); if (va.round.sudden) assert.strictEqual(va.round.n, st.suddenN); assert.strictEqual(va.round.label, st.suddenN ? '延長戦 ' + st.suddenN + '回目' : '第' + (st.next + 1) + '問 / ' + mode); }
+    else { if (st.draw) { assert.strictEqual(va.outcome, 'draw'); assert.strictEqual(vb.outcome, 'draw'); } else assert.notStrictEqual(va.outcome, vb.outcome); }
+  }
+});
+test('W10 対戦の CORE は DOM・通信・時刻・乱数・セーブに触れない（時刻は引数 serverNow だけ）', () => {
+  const src = V10.html.match(/\/\/ ---------- v1\.2 分割 4-4：対戦本体[\s\S]*?\n  return \{\n    dict: dict,/)[0]; assert(src.length > 3000);
+  assert(!/localStorage|fetch\(|Date\.now|document\.|window\.|Math\.random|firebase|crypto|persist\(|writeSave|\bsave\./i.test(src.replace(/\/\/[^\n]*/g, '')), '外部に触れている');
 });
 
 // ===================== F. ブラウザ（Playwright）：配線・設定画面・結果画面の描画 =====================

@@ -92,17 +92,18 @@ test('L06 開始：両者 ready でホストが「はじめる」→ match（no/
   const code = await createRoom(a); await joinRoom(b, code); await b.page.waitForSelector('#ol-code-big');
   await a.page.click('#ol-mode-5'); await b.page.waitForSelector('#ol-mode-5.on'); await a.page.click('#ol-ready'); await b.page.click('#ol-ready'); await a.page.waitForSelector('#ol-start:not([disabled])');
   const t0 = Date.now(); await a.page.click('#ol-start');
-  await a.page.waitForSelector('#ol-starting'); await b.page.waitForSelector('#ol-starting'); assert((await text(b, '#ol-starting')).includes('まもなく開始') && (await text(b, '#ol-starting')).includes('5組勝負'));
+  // 4-4 以降：開始合図のあとは対戦画面（カウントダウン → 第1問）に切り替わる
+  await a.page.waitForSelector('#vs-count, #vs-label'); await b.page.waitForSelector('#vs-count, #vs-label'); assert(/第1問 \/ 5/.test(await b.page.locator('#app').innerText()));
   const room = await dbGet('games/tenpuzzle/rooms/' + code); assert.deepStrictEqual(Object.keys(room.match).sort(), ['countdownAt', 'mode', 'no', 'seed']); assert.strictEqual(room.match.mode, 5); assert.strictEqual(room.match.no, 1); assert(new RegExp('^' + code + ':[0-9a-f]{16}:1$').test(room.match.seed), room.match.seed);
   assert(Math.abs(room.rounds[0].startAt - (t0 + 3000)) < 4000, 'startAt ≈ now+3000: ' + (room.rounds[0].startAt - t0)); assert.deepStrictEqual(Object.keys(room.rounds[0]), ['startAt']);
   const sa = await a.page.evaluate(([s, m]) => JSON.stringify(TP.versusSets(window.__TP_UI.POOL, s, m)), [room.match.seed, room.match.mode]);
   const sb = await b.page.evaluate(([s, m]) => JSON.stringify(TP.versusSets(window.__TP_UI.POOL, s, m)), [room.match.seed, room.match.mode]); assert.strictEqual(sa, sb); assert.strictEqual(JSON.parse(sa).length, 5);
   assert.strictEqual(await a.page.locator('#ol-start').count(), 0); assert.strictEqual(await b.page.locator('#ol-ready').count(), 0, '開始後は準備ボタンを出さない');
 }));
-test('L07 開始までの書き込みだけ：result・live・切断（onDisconnect）の書き込みはまだ無い。部屋のキーは meta/players/match/rounds のみ', withRoom(['ホスト', 'ゲスト'], async ([a, b]) => {
-  const code = await createRoom(a); await joinRoom(b, code); await b.page.waitForSelector('#ol-code-big'); await a.page.click('#ol-ready'); await b.page.click('#ol-ready'); await a.page.waitForSelector('#ol-start:not([disabled])'); await a.page.click('#ol-start'); await b.page.waitForSelector('#ol-starting');
-  const room = await dbGet('games/tenpuzzle/rooms/' + code); assert.deepStrictEqual(Object.keys(room).sort(), ['match', 'meta', 'players', 'rounds']); assert.strictEqual(room.rounds[0].result, undefined);
-  const html = fs.readFileSync(HTML, 'utf8'); assert(!/onDisconnect\s*\(/.test(html), 'onDisconnect は 4-5'); assert(!/rounds\/[^'"]*\/result/.test(html.replace(/\/\/[^\n]*/g, '')) || true);
+test('L07 開始の時点では result はまだ無い。部屋のキーは meta/players/match/rounds（＋4-4 の live）のみ。切断（onDisconnect）はまだ書かない', withRoom(['ホスト', 'ゲスト'], async ([a, b]) => {
+  const code = await createRoom(a); await joinRoom(b, code); await b.page.waitForSelector('#ol-code-big'); await a.page.click('#ol-ready'); await b.page.click('#ol-ready'); await a.page.waitForSelector('#ol-start:not([disabled])'); await a.page.click('#ol-start'); await b.page.waitForSelector('#vs-count, #vs-label');
+  const room = await dbGet('games/tenpuzzle/rooms/' + code); Object.keys(room).forEach(k => assert(['match', 'meta', 'players', 'rounds', 'live'].indexOf(k) >= 0, k)); assert.strictEqual(room.rounds[0].result, undefined);
+  const html = fs.readFileSync(HTML, 'utf8'); assert(!/onDisconnect\s*\(/.test(html), 'onDisconnect は 4-5');
 }));
 
 // ---------------- 拒否 ----------------
@@ -174,13 +175,23 @@ test('S02 SDK 失敗のあと「もういちど」で再接続できる（SDK �
   const page = await ctx.newPage(); await page.addInitScript(cfg => { window.__TP_FB_TEST__ = cfg; }, TEST_CFG); await page.goto('file://' + HTML);
   try { await page.click('#onlineBtnTitle'); await page.waitForSelector('#ol-retry', { timeout: 20000 }); ok = true; await page.click('#ol-retry'); await page.waitForSelector('#ol-create:not([disabled])', { timeout: 15000 }); } finally { await ctx.close(); }
 });
-test('S03 FB_CONFIG が未設定（REPLACE のまま）：入口は「準備中」で無効。押しても何も起きず、SDK も読み込まない。ソロは通常どおり', async () => {
-  const p = await player({ name: 'ひとり', noTestCfg: true }); let sdkReq = 0; p.ctx.on('request', r => { if (/gstatic\.com\/firebasejs/.test(r.url())) sdkReq++; });
+test('S03 FB_CONFIG が未設定（REPLACE のまま）なら：入口は「準備中」で無効。押しても何も起きず、SDK も読み込まない。ソロは通常どおり（4-4 で実値を入れたので、未設定は差し替え口で再現）', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 420, height: 800 } }); let sdkReq = 0; ctx.on('request', r => { if (/gstatic\.com\/firebasejs/.test(r.url())) sdkReq++; });
+  const page = await ctx.newPage(); const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  await page.addInitScript(() => { window.__TP_FB_TEST__ = { config: { apiKey: 'REPLACE_ME', authDomain: 'REPLACE_ME', databaseURL: 'REPLACE_ME', projectId: 'x', appId: 'REPLACE_ME' } }; });
+  await page.goto('file://' + HTML); await page.waitForSelector('#app'); const p = { ctx, page, errs };
   try {
-    assert.strictEqual(await p.page.locator('#onlineBtnTitle[disabled]').count(), 1); assert((await text(p, '#t-online-chip')).includes('準備中'));
-    await p.page.evaluate(() => window.__TP_UI.handle('online')); assert.strictEqual(await p.page.evaluate(() => window.__TP_UI.ui.screen), 'title'); assert.strictEqual(sdkReq, 0);
-    await soloWorks(p); assert.deepStrictEqual(p.errs, []);
-  } finally { await closeAll([p]); }
+    assert.strictEqual(await page.locator('#onlineBtnTitle[disabled]').count(), 1); assert((await page.locator('#t-online-chip').innerText()).includes('準備中'));
+    await page.evaluate(() => window.__TP_UI.handle('online')); assert.strictEqual(await page.evaluate(() => window.__TP_UI.ui.screen), 'title'); assert.strictEqual(sdkReq, 0);
+    await soloWorks(p); assert.deepStrictEqual(errs, []);
+  } finally { await ctx.close(); }
+});
+test('S03b 本番の FB_CONFIG は FACTOR の実値（asumath-games）。差し替え口なしでも入口は有効（未設定扱いにならない）', async () => {
+  const html = fs.readFileSync(HTML, 'utf8');
+  ["apiKey: 'AIzaSyC3__kwx4TH-ezcCCUWcb_J7PWZ7pDUjDc'", "authDomain: 'asumath-games.firebaseapp.com'", "databaseURL: 'https://asumath-games-default-rtdb.asia-southeast1.firebasedatabase.app'", "projectId: 'asumath-games'", "messagingSenderId: '254715782397'", "appId: '1:254715782397:web:bda2fd2283b292db050a94'"].forEach(x => assert(html.includes(x), x));
+  assert(!/REPLACE_WITH_FACTOR/.test(html));
+  const p = await player({ name: 'ひとり', noTestCfg: true });
+  try { assert.strictEqual(await p.page.locator('#onlineBtnTitle:not([disabled])').count(), 1); assert.strictEqual(await p.page.locator('#t-online-chip').count(), 0); } finally { await closeAll([p]); }
 });
 test('S04 設定済みなら Firebase の SDK は入口を押すまで読み込まない（ソロの起動を重くしない）。既存のタイトルの導線はそのまま', async () => {
   const p = await player({ name: 'ひとり' }); let sdkReq = 0; p.ctx.on('request', r => { if (/gstatic\.com\/firebasejs/.test(r.url())) sdkReq++; });

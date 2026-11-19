@@ -233,6 +233,31 @@ button:disabled{cursor:default;opacity:.4}
 .olinput{width:100%;padding:12px 16px;font-size:1.6rem;letter-spacing:.3em;text-align:center;font-family:inherit;font-weight:800;border:3px solid var(--line);border-radius:999px;outline:none;color:var(--ink);background:var(--card);text-transform:uppercase}
 .olinput:focus{border-color:var(--gold-2)}
 .olstart{font-size:1.4rem;font-weight:900;color:var(--accent);margin:14px 0}
+/* v1.2 分割4-4：対戦本体 */
+.vshead{display:flex;align-items:center;gap:8px;margin:4px 0 6px}
+.vshead .lbl{font-weight:900;font-family:"M PLUS Rounded 1c",sans-serif}
+.vshead .tm{margin-left:auto;font-weight:900;font-variant-numeric:tabular-nums;font-size:1.3rem;min-width:3.2em;text-align:right}
+.vshead .tm.low{color:var(--ng)}
+.vsscore{display:flex;gap:6px;margin-bottom:6px}
+.vsscore .s{flex:1;border-radius:12px;background:var(--chip);padding:6px 8px;font-weight:800;display:flex;justify-content:space-between;align-items:center;min-width:0}
+.vsscore .s.me{background:var(--gold-bg);box-shadow:inset 0 0 0 2px var(--gold-2)}
+.vsscore .s .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vsscore .s b{font-size:1.2rem;font-variant-numeric:tabular-nums}
+.vsopp{display:flex;align-items:center;gap:6px;margin:4px 0 8px;font-size:.85rem;color:var(--sub)}
+.vsc{display:inline-block;width:14px;height:20px;border-radius:3px;background:var(--line)}
+.vsc.on{background:var(--gold-2)}
+.vsring{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:conic-gradient(var(--ng) calc(var(--p) * 360deg), var(--line) 0);font-size:.7rem;font-weight:800;color:var(--ink)}
+.vsring span{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--panel)}
+.vslock{font-weight:800;color:var(--ng)}
+.vsbig{font-size:3.6rem;font-weight:900;text-align:center;margin:30px 0 10px;color:var(--accent);font-family:"M PLUS Rounded 1c",sans-serif}
+.vsreveal{text-align:center;padding:10px 0}
+.vsreveal .who{font-size:1.4rem;font-weight:900;margin:8px 0}
+.vsreveal .ex{font-size:1.4rem;font-weight:900;margin:6px 0;word-break:break-all}
+.vsrows{margin:10px 0;text-align:left}
+.vsrows .r{display:flex;gap:6px;align-items:center;padding:6px 8px;border-radius:10px;background:var(--chip);margin-bottom:4px;font-size:.85rem}
+.vsrows .r .w{margin-left:auto;font-weight:800}
+.vsresult{font-size:2rem;font-weight:900;text-align:center;margin:12px 0}
+.cards.locked{opacity:.4;pointer-events:none}
 .dailyNote{color:var(--sub);font-weight:700;margin:4px 0}
 
 /* v1.0：クリア時の小さな祝福（操作をブロックしない。transform/opacity のみ・pointer-events なし） */
@@ -1956,6 +1981,130 @@ var TP = (function () {
     return { removePlayer: hasKey(pl, uid), deleteRoom: others.length === 0 };
   }
 
+  // ---------- v1.2 分割 4-4：対戦本体（純関数のみ。通信・画面は UI 側）。部屋の状態（match / rounds / live）から試合の見え方を導出する ----------
+  var VS = { ROUND_MS: 60000, GRACE_MS: 1000, REVEAL_MS: 5000, NEXT_START_MS: 5000, LOCK_MS: 10000, TIMEOUT_MARGIN_MS: 300, MAX_ROUND_INDEX: 7 };
+  // timing はテスト用の短縮（roundMs だけ差し替え可）。本番は VS の値
+  function vsTiming(t) {
+    return { roundMs: (t && typeof t.roundMs === 'number' && t.roundMs > 0) ? t.roundMs : VS.ROUND_MS, graceMs: VS.GRACE_MS, revealMs: VS.REVEAL_MS,
+      nextStartMs: VS.NEXT_START_MS, lockMs: VS.LOCK_MS, marginMs: VS.TIMEOUT_MARGIN_MS };
+  }
+  // 参加者の並び：[ホスト, ゲスト]（versusReduce の players と同じ順）
+  function versusPlayers(room) {
+    var m = room && room.meta;
+    return m && typeof m.host === 'string' && typeof m.guest === 'string' && m.host !== m.guest ? [m.host, m.guest] : null;
+  }
+  // 確定した結果の列（rounds/0 から連続しているものだけ）
+  function versusResults(room) {
+    var out = [], rs = (room && room.rounds) || {};
+    for (var i = 0; i <= VS.MAX_ROUND_INDEX; i++) { var r = rs[i] || rs[String(i)]; if (!r || !r.result) break; out.push(r.result); }
+    return out;
+  }
+  // 出題の並び：本戦は versusSets、延長戦 n 回目は suddenDeathSet（それまでに出た全組を除く）。count 問ぶん
+  function versusSchedule(pool, seed, mode, count) {
+    var main = versusSets(pool, seed, mode);
+    if (!main) return null;
+    var out = [], used = [];
+    for (var i = 0; i < count; i++) {
+      var it;
+      if (i < main.length) it = { key: main[i].key, tier: main[i].tier, pts: main[i].pts, sudden: false, n: 0 };
+      else {
+        var n = i - main.length + 1, sd = suddenDeathSet(pool, seed, n, used);
+        if (!sd) return null;
+        it = { key: sd.key, tier: sd.tier, pts: sd.pts, sudden: true, n: n };
+      }
+      used.push(it.key); out.push(it);
+    }
+    return out;
+  }
+  // 相手の式の検証：parse できて、使った数字が組の数字と一致し、値が 10 になるか
+  function verifySolveExpr(expr, digits) {
+    var tree;
+    try { if (typeof expr !== 'string' || !expr || expr.length > 64) return { ok: false, reason: 'parse' }; tree = parse(expr); } catch (e) { return { ok: false, reason: 'parse' }; }
+    if (!tree) return { ok: false, reason: 'parse' };
+    try {
+      if (leaves(tree).slice().sort().join(',') !== digits.slice().sort().join(',')) return { ok: false, reason: 'digits' };
+      if (!eq(evalTree(tree), frac(10))) return { ok: false, reason: 'value' };
+    } catch (e) { return { ok: false, reason: 'value' }; }
+    return { ok: true };
+  }
+  // 試合の見え方。room は参加者が読める部屋全体、serverNow はサーバー時刻の推定値
+  //   phase: none（未開始）/ countdown（第1問の前）/ play / overtime（時間切れの記録待ち）/ reveal（直前のラウンドの開示）/ finished / waiting（次の開始時刻が無い：異常）
+  function versusView(room, uid, pool, serverNow, timing) {
+    var T = vsTiming(timing);
+    var v = { ok: false, phase: 'none' };
+    var m = room && room.match, rounds = (room && room.rounds) || {};
+    if (!m || typeof m.seed !== 'string' || VERSUS.MODES.indexOf(m.mode) < 0 || !rounds[0] || typeof rounds[0].startAt !== 'number') return v;
+    var players = versusPlayers(room);
+    if (!players) { v.error = 'players'; return v; }
+    var results = versusResults(room);
+    var sched = versusSchedule(pool, m.seed, m.mode, Math.min(VS.MAX_ROUND_INDEX + 1, Math.max(m.mode, results.length + 1)));
+    if (!sched) { v.error = 'schedule'; return v; }
+    var plan = sched.slice(0, m.mode).map(function (x) { return x.pts; });
+    var st = versusReduce({ mode: m.mode, players: players, plan: plan }, results);
+    if (st.error) { v.error = st.error; return v; }
+    var by = indexPool(pool), names = {};
+    players.forEach(function (p) { var pl = room.players && room.players[p]; names[p] = cleanName(pl && pl.name) || LOBBY.DEFAULT_NAME; });
+    var meIdx = players.indexOf(uid), oppIdx = meIdx === 0 ? 1 : 0;
+    v = { ok: true, mode: m.mode, seed: m.seed, no: m.no, players: players, names: names, meIdx: meIdx, me: meIdx >= 0 ? uid : null, opp: meIdx >= 0 ? players[oppIdx] : null,
+      results: results, state: st, finished: st.finished, scores: st.scores.slice(), myScore: meIdx >= 0 ? st.scores[meIdx] : null, oppScore: meIdx >= 0 ? st.scores[oppIdx] : null,
+      outcome: null, round: null, reveal: null, phase: 'none', timeoutDue: false, msLeft: 0, countdownMs: 0, canDeclare: false, timing: T };
+    var describe = function (i) {
+      var it = sched[i], e = by[it.key];
+      return { i: i, key: it.key, tier: it.tier, pts: it.pts, sudden: it.sudden, n: it.n, digits: e.digits.slice(), solvable: !!e.solvable, example: e.example || null,
+        label: it.sudden ? '延長戦 ' + it.n + '回目' : '第' + (i + 1) + '問 / ' + m.mode, startAt: rounds[i] && typeof rounds[i].startAt === 'number' ? rounds[i].startAt : null };
+    };
+    var revealOf = function (i) {
+      var d = describe(i), r = results[i], ok = true;
+      if (r.kind === 'solve') ok = verifySolveExpr(r.expr, d.digits).ok;
+      return { i: i, round: d, kind: r.kind, by: r.by || null, byName: r.by ? names[r.by] : null, mine: r.by === uid, expr: r.expr || null, at: r.at,
+        pts: (r.kind === 'solve' || r.kind === 'declare') ? (i < m.mode ? plan[i] : 1) : 0, verified: ok };
+    };
+    if (st.finished) {
+      v.outcome = st.draw ? 'draw' : (st.winner === uid ? 'win' : (meIdx >= 0 ? 'lose' : null));
+      var last = results.length - 1;
+      if (last >= 0 && typeof results[last].at === 'number' && serverNow < results[last].at + T.revealMs) { v.phase = 'reveal'; v.reveal = revealOf(last); v.revealUntil = results[last].at + T.revealMs; }
+      else v.phase = 'finished';
+      v.rows = results.map(function (r, i) { return revealOf(i); });
+      return v;
+    }
+    var i = st.next, d = describe(i);
+    v.round = d;
+    v.canDeclare = m.mode === 5 && !d.sudden;
+    if (d.sudden && d.n !== st.suddenN) { v.ok = false; v.error = 'sudden-mismatch'; return v; }
+    if (d.startAt === null) { v.phase = 'waiting'; if (i > 0) v.reveal = revealOf(i - 1); return v; }
+    d.deadline = d.startAt + T.roundMs;
+    if (serverNow < d.startAt) {
+      if (i === 0) { v.phase = 'countdown'; v.countdownMs = d.startAt - serverNow; }
+      else { v.phase = 'reveal'; v.reveal = revealOf(i - 1); v.revealUntil = d.startAt; }
+    } else if (serverNow < d.deadline) { v.phase = 'play'; v.msLeft = d.deadline - serverNow; }
+    else { v.phase = 'overtime'; v.timeoutDue = serverNow > d.deadline + T.graceMs + T.marginMs; }
+    var lv = (room.live || {});
+    var ol = v.opp ? lv[v.opp] : null, ml = v.me ? lv[v.me] : null;
+    v.oppCards = ol && ol.r === i && typeof ol.cards === 'number' ? ol.cards : 4;
+    v.oppLockMs = ol && typeof ol.lockUntil === 'number' ? Math.max(0, ol.lockUntil - serverNow) : 0;
+    v.myLockMs = ml && typeof ml.lockUntil === 'number' ? Math.max(0, ml.lockUntil - serverNow) : 0;
+    return v;
+  }
+  // 結果の書き込み（rounds/<i>/result と、試合が続くなら rounds/<i+1>/startAt を同じ更新で）。i が現在のラウンドでなければ null
+  function versusResultUpdate(room, pool, i, result, serverNow, ts) {
+    var players = versusPlayers(room), m = room && room.match;
+    if (!players || !m) return null;
+    var results = versusResults(room);
+    if (i !== results.length) return null;
+    var sched = versusSchedule(pool, m.seed, m.mode, Math.min(VS.MAX_ROUND_INDEX + 1, Math.max(m.mode, results.length + 1)));
+    if (!sched) return null;
+    var plan = sched.slice(0, m.mode).map(function (x) { return x.pts; });
+    var rec = { kind: result.kind, at: ts };
+    if (result.by) rec.by = result.by;
+    if (result.kind === 'solve') rec.expr = result.expr;
+    var after = versusReduce({ mode: m.mode, players: players, plan: plan }, results.concat([{ by: result.by || null, kind: result.kind }]));
+    if (after.error) return null;
+    var u = {};
+    u['rounds/' + i + '/result'] = rec;
+    if (!after.finished && i + 1 <= VS.MAX_ROUND_INDEX) u['rounds/' + (i + 1) + '/startAt'] = serverNow + VS.NEXT_START_MS;
+    return u;
+  }
+
   return {
     dict: dict, hasKey: hasKey, migrateRec: migrateRec, inspectSave: inspectSave, recContribution: recContribution, revOf: revOf, sameRev: sameRev,
     checkRecord: checkRecord,
@@ -1990,7 +2139,9 @@ var TP = (function () {
     poolHash: poolHash, versusReduce: versusReduce,
     LOBBY: LOBBY, makeRoomCode: makeRoomCode, isRoomCode: isRoomCode, normalizeRoomCode: normalizeRoomCode, lobbyName: lobbyName, randomHex16: randomHex16,
     makeMatchSeed: makeMatchSeed, buildCreateUpdate: buildCreateUpdate, buildJoinUpdate: buildJoinUpdate, joinCheck: joinCheck, lobbyView: lobbyView,
-    lobbyStartPlan: lobbyStartPlan, buildStartUpdate: buildStartUpdate, leavePlan: leavePlan
+    lobbyStartPlan: lobbyStartPlan, buildStartUpdate: buildStartUpdate, leavePlan: leavePlan,
+    VS: VS, vsTiming: vsTiming, versusPlayers: versusPlayers, versusResults: versusResults, versusSchedule: versusSchedule, verifySolveExpr: verifySolveExpr,
+    versusView: versusView, versusResultUpdate: versusResultUpdate
   };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = TP;
@@ -2599,6 +2750,13 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
       case 'ol-mode': olMode(parseInt(ds.mode, 10)); break;
       case 'ol-start': olStart(); break;
       case 'ol-leave': olLeave(''); break;
+      case 'vs-card': vsCard(parseInt(ds.i, 10)); break;
+      case 'vs-op': vsOp(ds.op); break;
+      case 'vs-swap': vsSwap(); break;
+      case 'vs-undo': vsUndo(); break;
+      case 'vs-reset': vsReset(); break;
+      case 'vs-declare': vsDeclare(); break;
+      case 'vs-lobby': olLeave(''); break;
     }
   }
   function setTitleMsg(m, kind) { ui.titleMsg = m; ui.titleMsgKind = kind || ''; }
@@ -2866,14 +3024,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
   var FB_VERSION = '12.12.0';
   var FB_SDK_BASE = 'https://www.gstatic.com/firebasejs/' + FB_VERSION + '/';
   var FB_SDK_FILES = ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-database-compat.js'];
-  // ★要設定：FACTOR の index.html と同じ FB_CONFIG の値に置き換える（asumath-games／asia-southeast1）。
+  // FACTOR の index.html と同じ FB_CONFIG（asumath-games／asia-southeast1）。
   //   REPLACE で始まる値が残っている間は「準備中」としてオンラインの入口を無効にする（ソロには影響しない）。
   var FB_CONFIG = {
-    apiKey: 'REPLACE_WITH_FACTOR_FB_CONFIG_apiKey',
-    authDomain: 'REPLACE_WITH_FACTOR_FB_CONFIG_authDomain',
-    databaseURL: 'REPLACE_WITH_FACTOR_FB_CONFIG_databaseURL',
+    apiKey: 'AIzaSyC3__kwx4TH-ezcCCUWcb_J7PWZ7pDUjDc',
+    authDomain: 'asumath-games.firebaseapp.com',
+    databaseURL: 'https://asumath-games-default-rtdb.asia-southeast1.firebasedatabase.app',
     projectId: 'asumath-games',
-    appId: 'REPLACE_WITH_FACTOR_FB_CONFIG_appId'
+    messagingSenderId: '254715782397',
+    appId: '1:254715782397:web:bda2fd2283b292db050a94'
   };
   var fbTest = (typeof window !== 'undefined' && window.__TP_FB_TEST__) || null; // テスト専用の差し替え（エミュレータ）。本番では未定義
   function fbConfig() { return fbTest && fbTest.config ? fbTest.config : FB_CONFIG; }
@@ -3017,7 +3176,16 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
         return;
       }
       if (chk.rejoin) { olEnterRoom(code); return; }
-      return ref.update(TP.buildJoinUpdate(OL.uid, name, olTs())).then(function () { olEnterRoom(code); }, function () {
+      return ref.update(TP.buildJoinUpdate(OL.uid, name, olTs())).then(function () {
+        // 4-4：参加直後に（参加者として読めるようになった）match / rounds を読み、試合が始まっていれば退出する（途中参加の防止）
+        return Promise.all([ref.child('match').once('value'), ref.child('rounds').once('value')]).then(function (rr) {
+          var m = rr[0].val();
+          if (rr[1].exists() || (m && m.seed)) {
+            return ref.child('players/' + OL.uid).remove().catch(function () { /* 続行 */ }).then(function () { OL.busy = false; olMsg('そのへやは対戦中です', 'ng'); render(); });
+          }
+          olEnterRoom(code);
+        });
+      }, function () {
         // 同時に別の人が先に入った場合など。もう一度読んで満員かどうかを知らせる
         return ref.child('players').once('value').then(function (s2) {
           var again = TP.joinCheck({ meta: room.meta, players: s2.val() }, OL.uid, POOL_HASH);
@@ -3039,6 +3207,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
   function olStart() {
     var plan = TP.lobbyStartPlan(OL.room, OL.uid, OL.code, olRnd);
     if (!plan || !OL.ref || OL.busy) return;
+    if (fbTest && typeof fbTest.seedHex === 'string') plan.seed = TP.makeMatchSeed(OL.code, fbTest.seedHex, plan.no); // テスト専用：組セットを固定する
     OL.busy = true;
     OL.ref.update(TP.buildStartUpdate(plan, olTs(), olServerNow())).then(function () { OL.busy = false; }, function (e) { olFail(e, 'はじめられませんでした'); });
   }
@@ -3075,8 +3244,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
         '<p class="olmsg' + (OL.msgKind ? ' ' + OL.msgKind : '') + '" id="ol-msg">' + esc(OL.msg) + '</p>' +
         '<div class="btns"><button class="btn primary wide" data-act="ol-join" id="ol-join">入る</button></div></div>';
     }
-    // 待機（ロビー）
+    // 待機（ロビー）。試合が始まっていれば対戦画面
     var v = TP.lobbyView(OL.room, OL.uid);
+    if (v.exists && v.started) return renderVersus();
     h += '<div class="sub">へやのコード</div><div class="olcode" id="ol-code-big">' + esc(OL.code) + '</div>';
     if (!v.exists) return h + '<p class="olmsg" id="ol-msg">よみこみ中…</p><div class="btns"><button class="btn wide" data-act="ol-leave" id="ol-leave">やめる</button></div></div>';
     v.players.forEach(function (p, i) {
@@ -3105,8 +3275,190 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
     if (t && t.id === 'ol-code') OL.joinInput = TP.normalizeRoomCode(t.value);
   });
 
+
+  // ===== オンライン対戦：対戦本体（v1.2 分割 4-4）。ソロの盤面（ui.board）・セーブ・デイリーには一切触れない（記録は残さない。画面表示のみ） =====
+  var VSS = { i: -1, key: null, board: null, sel: [], a: TP.newInputA(), msg: '', msgKind: '', done: false, lockUntil: 0, liveRound: -1,
+    lastSig: '', timeoutInflight: false, lastTimeoutTry: 0, log: [], soundRound: -1 };
+  function vsView() { return OL.room ? TP.versusView(OL.room, OL.uid, POOL, olServerNow(), fbTest && fbTest.timing) : { ok: false, phase: 'none' }; }
+  function vsMsg(m, kind) { VSS.msg = m; VSS.msgKind = kind || ''; var e = document.getElementById('vs-msg'); if (e) { e.textContent = m; e.className = 'msg ' + (kind || ''); } }
+  // ラウンドが変わったら自分の盤面を作り直し、live（r / cards）を書く
+  function vsSync(v) {
+    if (!v.ok || !v.round) return;
+    var d = v.round;
+    if (VSS.i !== d.i || VSS.key !== d.key) {
+      VSS.i = d.i; VSS.key = d.key; VSS.board = TP.newBoard(d.digits); VSS.sel = []; VSS.a = TP.newInputA(); VSS.done = false; VSS.msg = ''; VSS.msgKind = '';
+    }
+    if (VSS.liveRound !== d.i && v.me && OL.ref) {
+      VSS.liveRound = d.i;
+      var cur = OL.room && OL.room.live && OL.room.live[OL.uid];
+      var p = cur ? OL.ref.child('live/' + OL.uid).update({ r: d.i, cards: 4 }) : OL.ref.child('live/' + OL.uid).set({ r: d.i, cards: 4, lockUntil: 0 });
+      p.catch(function () { VSS.liveRound = -1; });
+    }
+  }
+  function vsLiveCards() {
+    if (!OL.ref || !VSS.board) return;
+    OL.ref.child('live/' + OL.uid).update({ r: VSS.i, cards: Math.max(1, Math.min(4, VSS.board.cards.length)) }).catch(function () { /* 表示だけの情報なので続行 */ });
+  }
+  function vsLocked(v) { return Math.max(v.myLockMs || 0, VSS.lockUntil - olServerNow()) > 0; }
+  function vsCanAct(v) { return v.ok && v.phase === 'play' && VSS.i === v.round.i && !VSS.done && !vsLocked(v); }
+  function vsCard(i) {
+    var v = vsView(); if (!vsCanAct(v)) return;
+    if (modeA()) {
+      var r = TP.aTapCard(VSS.a, VSS.board, i);
+      if (r.type === 'blocked') { vsMsg(r.error === 'divzero' ? '0 で割ることはできません。別の数字をえらんでください' : 'えらび直してください', 'ng'); SFX.bad(); render(); return; }
+      vsMsg('');
+      if (r.type === 'merge') { vsAfterMerge(v); return; }
+      SFX.tap(); render(); return;
+    }
+    var at = VSS.sel.indexOf(i);
+    if (at >= 0) VSS.sel.splice(at, 1); else if (VSS.sel.length < 2) VSS.sel.push(i); else VSS.sel = [i];
+    vsMsg(''); SFX.tap(); render();
+  }
+  function vsOp(op) {
+    var v = vsView(); if (!vsCanAct(v)) return;
+    if (modeA()) { if (TP.aTapOp(VSS.a, op)) { vsMsg(''); SFX.tap(); render(); } return; }
+    if (VSS.sel.length !== 2) return;
+    var res = TP.merge(VSS.board, VSS.sel[0], VSS.sel[1], op);
+    if (!res.ok) { vsMsg(res.error === 'divzero' ? '0 で割ることはできません' : 'カードを2枚えらんでください', 'ng'); SFX.bad(); render(); return; }
+    VSS.sel = []; vsMsg(''); vsAfterMerge(v);
+  }
+  function vsSwap() {
+    var v = vsView(); if (!vsCanAct(v)) return;
+    if (modeA()) { if (TP.aFlip(VSS.a)) { vsMsg(''); render(); } } else if (VSS.sel.length === 2) { VSS.sel.reverse(); render(); }
+  }
+  function vsUndo() { var v = vsView(); if (!vsCanAct(v)) return; if (TP.undo(VSS.board)) { VSS.sel = []; TP.clearInputA(VSS.a); vsMsg(''); vsLiveCards(); render(); } }
+  function vsReset() { var v = vsView(); if (!vsCanAct(v)) return; TP.reset(VSS.board, v.round.digits); VSS.sel = []; TP.clearInputA(VSS.a); vsMsg(''); vsLiveCards(); render(); }
+  function vsAfterMerge(v) {
+    vsLiveCards();
+    if (TP.isFinished(VSS.board)) {
+      if (TP.isWin(VSS.board)) { VSS.done = true; vsSubmit(v, { kind: 'solve', by: OL.uid, expr: TP.infix(VSS.board.cards[0].e) }); render(); return; }
+      vsMsg(TP.fracStr(VSS.board.cards[0].v) + ' になりました。1手戻すかリセット', 'ng'); SFX.bad();
+    } else SFX.pop();
+    render();
+  }
+  // 結果の書き込み（先着）。拒否されたら「タッチの差」か「時間切れ」
+  function vsSubmit(v, result) {
+    var i = v.round.i;
+    var u = TP.versusResultUpdate(OL.room, POOL, i, result, olServerNow(), olTs());
+    if (!u) { vsMsg('タッチの差でした', 'ng'); return; }
+    vsMsg(result.kind === 'declare' ? '宣言しています…' : '送っています…', '');
+    OL.ref.update(u).then(function () { SFX.win(); vsMsg('', ''); }, function () {
+      var late = olServerNow() > v.round.startAt + v.timing.roundMs + v.timing.graceMs;
+      vsMsg(late ? '時間切れでした' : 'タッチの差でした', 'ng'); SFX.bad(); render();
+    });
+  }
+  // 「作れません」：5組の本戦だけ。作れない組なら declare、作れる組ならお手つき（10秒操作不可、live.lockUntil）
+  function vsDeclare() {
+    var v = vsView(); if (!vsCanAct(v) || !v.canDeclare) return;
+    if (!v.round.solvable) { VSS.done = true; vsSubmit(v, { kind: 'declare', by: OL.uid }); render(); return; }
+    var until = olServerNow() + v.timing.lockMs;
+    VSS.lockUntil = until;
+    OL.ref.child('live/' + OL.uid).update({ r: VSS.i, cards: Math.max(1, Math.min(4, VSS.board.cards.length)), lockUntil: until }).catch(function () { /* 表示だけ。ローカルのロックは有効 */ });
+    vsMsg('お手つき！ 10秒まって', 'ng'); SFX.bad(); render();
+  }
+  // 時間切れ：締切＋猶予を過ぎたら、両方のクライアントが timeout を書きにいく（先に書いた方だけが通る）
+  function vsTryTimeout(v) {
+    if (VSS.timeoutInflight || Date.now() - VSS.lastTimeoutTry < 700) return;
+    var u = TP.versusResultUpdate(OL.room, POOL, v.round.i, { kind: 'timeout' }, olServerNow(), olTs());
+    if (!u) return;
+    VSS.timeoutInflight = true; VSS.lastTimeoutTry = Date.now();
+    OL.ref.update(u).then(function () { VSS.timeoutInflight = false; }, function () { VSS.timeoutInflight = false; });
+  }
+  function vsSig(v) { return [v.phase, v.round ? v.round.i : '-', v.reveal ? v.reveal.i : '-', v.finished ? 'F' : ''].join(':'); }
+  // 200ms ごと：場面が変わったら描き直し、変わらなければ残り時間などだけ書き換える
+  function vsTick() {
+    if (ui.screen !== 'online' || OL.step !== 'room' || !OL.room) return;
+    var lv = TP.lobbyView(OL.room, OL.uid); if (!lv.started) return;
+    var v = vsView(); if (!v.ok) return;
+    var sig = vsSig(v);
+    if (sig !== VSS.lastSig) render();
+    else vsUpdateTimers(v);
+    if (v.phase === 'overtime' && v.timeoutDue) vsTryTimeout(v);
+  }
+  setInterval(vsTick, 200);
+  function vsRing(ms, total) { var p = Math.max(0, Math.min(1, ms / total)); return '<span class="vsring" style="--p:' + p.toFixed(3) + '"><span>' + Math.ceil(ms / 1000) + '</span></span>'; }
+  function vsOppLockHTML(v) { return v.oppLockMs > 0 ? '<span class="vslock" id="vs-opplock">' + vsRing(v.oppLockMs, v.timing.lockMs) + ' あいては お手つき中</span>' : '<span id="vs-opplock"></span>'; }
+  function vsUpdateTimers(v) {
+    var e = document.getElementById('vs-timer');
+    if (e && v.phase === 'play') { var sec = Math.ceil(v.msLeft / 1000); e.textContent = sec; e.className = 'tm' + (sec <= 10 ? ' low' : ''); }
+    if (e && v.phase === 'overtime') { e.textContent = '0'; e.className = 'tm low'; }
+    var c = document.getElementById('vs-count'); if (c && v.phase === 'countdown') c.textContent = String(Math.max(1, Math.ceil(v.countdownMs / 1000)));
+    var o = document.getElementById('vs-opplock'); if (o) o.outerHTML = vsOppLockHTML(v);
+    var ml = Math.max(v.myLockMs || 0, VSS.lockUntil - olServerNow());
+    var me = document.getElementById('vs-mylock'); if (me) me.textContent = ml > 0 ? 'お手つき！ あと ' + Math.ceil(ml / 1000) + ' 秒' : '';
+    if (ml <= 0 && document.querySelector('.cards.locked')) render();
+  }
+  function vsScoreHTML(v) {
+    var me = v.meIdx, op = me === 0 ? 1 : 0;
+    return '<div class="vsscore"><div class="s me" id="vs-score-me"><span class="nm">' + esc(v.names[v.players[me]]) + '（あなた）</span><b>' + v.scores[me] + '</b></div>' +
+      '<div class="s" id="vs-score-opp"><span class="nm">' + esc(v.names[v.players[op]]) + '</span><b>' + v.scores[op] + '</b></div></div>';
+  }
+  function vsRevealHTML(v) {
+    var r = v.reveal, d = r.round, h = '<div class="vsreveal" id="vs-reveal"><div class="sub">' + esc(d.label) + '</div>';
+    if (r.kind === 'solve') {
+      h += '<div class="who" id="vs-reveal-who">' + (r.mine ? 'あなたが先に10！' : esc(r.byName) + ' が先に10！') + '</div><div class="ex" id="vs-reveal-expr">' + esc(TP.pretty(r.expr)) + ' = 10</div>';
+      if (!r.verified) h += '<div class="msg ng" id="vs-verify">検証できませんでした</div>';
+    } else if (r.kind === 'declare') {
+      h += '<div class="who" id="vs-reveal-who">' + (r.mine ? 'あなたの見極め！' : esc(r.byName) + ' の見極め！') + '</div><div class="ex" id="vs-reveal-expr">作れない組でした！</div>';
+    } else if (r.kind === 'timeout') {
+      h += '<div class="who" id="vs-reveal-who">時間切れ！</div><div class="ex" id="vs-reveal-expr">' + (d.solvable ? '答えの一例：' + esc(TP.pretty(d.example)) : 'この組は10を作れません') + '</div>';
+    } else h += '<div class="who" id="vs-reveal-who">' + esc(r.kind) + '</div>';
+    if (VSS.i === r.i && VSS.msg) h += '<div class="msg ' + VSS.msgKind + '" id="vs-msg">' + esc(VSS.msg) + '</div>';
+    h += '<div><span class="chip" id="vs-reveal-tier">' + esc(d.sudden ? '延長戦' : d.tier) + '</span> <span class="chip" id="vs-reveal-pts">' + (r.pts ? r.pts + '点' : '0点') + '</span></div>';
+    return h + '</div>';
+  }
+  function renderVersus() {
+    var v = vsView();
+    var head = '<div class="bar"><div class="grow"><h2>オンライン対戦</h2></div></div><div class="olwrap">';
+    if (!v.ok) return head + '<p class="olmsg" id="ol-msg">' + (v.error ? '対戦のデータを読めませんでした' : 'よみこみ中…') + '</p><div class="btns"><button class="btn wide" data-act="vs-lobby" id="vs-lobby">ロビーに戻る</button></div></div>';
+    var sig = vsSig(v);
+    if (sig !== VSS.lastSig) { VSS.lastSig = sig; VSS.log.push({ sig: sig, t: Date.now() }); } // 場面の切り替わりの記録（テストで両画面の同時性を確かめる）
+    vsSync(v);
+    var h = head + vsScoreHTML(v);
+    if (v.phase === 'finished') {
+      var res = v.outcome === 'win' ? 'あなたの勝ち！' : v.outcome === 'lose' ? 'あなたの負け' : '引き分け';
+      h += '<div class="vsresult" id="vs-final">' + res + '</div>';
+      if (v.state.endedBy === 'drawLimit') h += '<p class="sub" id="vs-final-note">延長戦で3回つづけて時間切れになったので引き分けです</p>';
+      h += '<div class="vsrows" id="vs-rows">';
+      v.rows.forEach(function (r) {
+        var w = r.kind === 'timeout' ? '時間切れ' : (r.mine ? 'あなた' : esc(r.byName)) + (r.kind === 'declare' ? '（見極め）' : '') + ' +' + r.pts;
+        h += '<div class="r" id="vs-row-' + r.i + '"><span>' + esc(r.round.label) + '</span><span class="chip">' + esc(r.round.digits.join(' ')) + '</span><span class="w">' + w + '</span></div>';
+      });
+      h += '</div><div class="btns"><button class="btn primary wide" data-act="vs-lobby" id="vs-lobby">ロビーに戻る</button></div></div>';
+      return h;
+    }
+    if (v.phase === 'reveal' || v.phase === 'waiting') return h + vsRevealHTML(v) + '</div>';
+    if (v.phase === 'countdown') return h + '<div class="sub">' + esc(v.round.label) + '</div><div class="vsbig" id="vs-count">' + Math.max(1, Math.ceil(v.countdownMs / 1000)) + '</div><p class="sub">まもなく開始！</p></div>';
+    // play / overtime：自分の盤面（ソロと同じ操作方法 A/B）
+    var d = v.round, b = VSS.board, locked = vsLocked(v), act = vsCanAct(v);
+    h += '<div class="vshead"><span class="lbl" id="vs-label">' + esc(d.label) + '</span><span class="tm' + (v.phase === 'overtime' || v.msLeft <= 10000 ? ' low' : '') + '" id="vs-timer">' + (v.phase === 'overtime' ? 0 : Math.ceil(v.msLeft / 1000)) + '</span></div>';
+    h += '<div class="vsopp" id="vs-opp">あいて：';
+    for (var k = 0; k < 4; k++) h += '<span class="vsc' + (k < v.oppCards ? ' on' : '') + '"></span>';
+    h += ' <span id="vs-oppcards">のこり' + v.oppCards + 'まい</span> ' + vsOppLockHTML(v) + '</div>';
+    h += '<div class="cards' + (locked || !act ? ' locked' : '') + '">';
+    var A = modeA();
+    b.cards.forEach(function (c, i) {
+      var si = A ? (VSS.a.first === i ? 0 : -1) : VSS.sel.indexOf(i);
+      h += '<button class="card' + (si >= 0 ? ' sel' : '') + (b.cards.length === 1 && TP.isWin(b) ? ' won' : '') + '" data-act="vs-card" data-i="' + i + '"' + (act ? '' : ' disabled') + '>' +
+        (si >= 0 ? '<span class="ord">' + (si + 1) + '</span>' : '') + fracHTML(c.v) + (c.v.d !== 1 ? '<span class="approx">≈' + TP.approx(c.v) + '</span>' : '') + '</button>';
+    });
+    h += '</div>';
+    if (A) h += '<div class="expr-box" id="vs-expr">' + esc(TP.aExpr(VSS.a, b)) + '</div>';
+    h += '<div class="ops">';
+    ['+', '-', '*', '/'].forEach(function (op) {
+      var en = act && (A ? VSS.a.first !== null : VSS.sel.length === 2);
+      h += '<button class="op' + (A && VSS.a.op === op ? ' on' : '') + '" data-act="vs-op" data-op="' + op + '"' + (en ? '' : ' disabled') + '><span class="sym">' + TP.pretty(TP.SYM[op]) + '</span></button>';
+    });
+    h += '</div><div class="swap-row"><button class="btn" data-act="vs-swap"' + (act && (A ? VSS.a.op !== null : VSS.sel.length === 2) ? '' : ' disabled') + '>⇄ 向きを入れ替え</button></div>';
+    h += '<div class="msg ' + VSS.msgKind + '" id="vs-msg">' + esc(VSS.msg) + '</div><div class="vslock" id="vs-mylock">' + (locked ? 'お手つき！ あと ' + Math.ceil(Math.max(v.myLockMs, VSS.lockUntil - olServerNow()) / 1000) + ' 秒' : '') + '</div>';
+    h += '<div class="tools"><button class="btn" data-act="vs-undo"' + (act && b.history.length ? '' : ' disabled') + '>↶ 1手戻す</button><button class="btn" data-act="vs-reset"' + (act && b.history.length ? '' : ' disabled') + '>リセット</button></div>';
+    if (v.canDeclare) h += '<button class="btn wide declare" data-act="vs-declare" id="vs-declare"' + (act ? '' : ' disabled') + '>「10は作れません」</button>';
+    if (v.phase === 'overtime') h += '<p class="sub" id="vs-overtime">時間切れ…</p>';
+    return h + '</div>';
+  }
+
   // テスト・デバッグ用の窓口
-  window.__TP_UI = { OL: OL, bgm: bgm, ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },
+  window.__TP_UI = { OL: OL, VSS: VSS, vsView: vsView, bgm: bgm, ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },
     handle: handle, render: render, POOL: POOL, exportText: exportText, importText: importText,
     getState: function () { return { readOnly: readOnly, conflict: conflict, saveWarn: saveWarn, tab: TAB_ID, boot: boot.status, lastRev: lastRev }; }, persist: persist,
     showTut: showTut, getTutIdx: function () { return tutIdx; },
