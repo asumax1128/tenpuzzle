@@ -15,7 +15,9 @@ let pass = 0, fail = 0; const failures = [];
 const queue = [];
 function test(name, fn) { queue.push({ name, fn }); }
 async function runAll() {
+  const only = process.env.TP_ONLY ? new RegExp(process.env.TP_ONLY) : null; // 開発用：名前が一致するテストだけ実行（例 TP_ONLY='^(Q|P)'）。全件実行が通常
   for (const t of queue) {
+    if (only && !only.test(t.name) && !/^F-(setup|teardown)/.test(t.name)) continue;
     try { await t.fn(); pass++; console.log('ok   ' + t.name); }
     catch (e) { fail++; failures.push(t.name); console.log('FAIL ' + t.name + '\n     ' + (e && e.message)); }
   }
