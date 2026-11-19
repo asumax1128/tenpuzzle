@@ -80,6 +80,11 @@ test('A07 meta の検証：host は自分／v=1／app 1〜16字／poolHash は 0
   for (const b of bad) { await seed(X, { meta: false, players: false, match: false, round0: false }); await ng(room(A()).update({ meta: Object.assign(META('A'), { createdAt: N }, b), 'players/A': PL('あ', { joinedAt: N }) })); }
   for (const e of [{ poolHash: 0 }, { poolHash: 4294967295 }]) { await seed(X, { meta: false, players: false, match: false, round0: false }); await ok(room(A()).update({ meta: Object.assign(META('A'), { createdAt: N }, e), 'players/A': PL('あ', { joinedAt: N }) })); }
 });
+test('A06b 他人を host に指名した部屋・guest を最初から入れた部屋は作れない（部屋の乗っ取り・横取りの防止）', async () => {
+  const m = (o) => Object.assign(META('A'), { createdAt: N }, o);
+  for (const o of [{ host: 'B', guest: 'A' }, { host: 'B' }, { guest: 'B' }, { guest: 'A' }]) { await seed(X, { meta: false, players: false, match: false, round0: false }); await ng(room(A()).update({ meta: m(o), 'players/A': PL('あ', { joinedAt: N }) })); }
+  await seed(X, { meta: false, players: false, match: false, round0: false }); await ng(room(A()).update({ meta: m({ host: 'B', guest: 'A' }), 'players/A': PL('あ', { joinedAt: N }), 'players/B': PL('い', { joinedAt: N }) }));
+});
 test('A08 meta は作成時のみ（write-once）。既存の部屋の meta を、ホストも他人も書き換えられない（guest 枠は別規則）', async () => {
   await seed(X, { guest: false });
   await ng(room(A()).child('meta').set(Object.assign(META('A'), { createdAt: N }))); await ng(room(B()).child('meta').set(Object.assign(META('B'), { createdAt: N })));

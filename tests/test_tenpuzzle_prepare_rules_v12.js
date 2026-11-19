@@ -57,6 +57,11 @@ test('S04 既存ルールが1つでも変わっていたら assert で落ちる�
   Object.keys(muts).forEach(k => { const c = mk(); muts[k](c); assert.throws(() => prep.assertOnlyTenpuzzleAdded(SAMPLE, c), /assert|変わって|一致|順序|Expected|deepStrictEqual/i, k); });
   const c2 = clone(SAMPLE); assert.throws(() => prep.assertOnlyTenpuzzleAdded(SAMPLE, c2), /Expected|deepStrictEqual|added/i, 'tenpuzzle が足されていない');
 });
+test('S04b composeRules 自身が検証している：合成直後に既存ルールを書き換えられたら（テスト用フック）、assert で落ちる', () => {
+  const muts = [c => { c.rules.games.iroyomi.rooms.$code['.read'] = 'true'; }, c => { delete c.rules.games.factor; }, c => { c.rules['.write'] = true; }, c => { c.rules.games.newgame = {}; }];
+  muts.forEach((m, i) => assert.throws(() => prep.composeRules(SAMPLE, fragment, { afterMerge: m }), /既存ルール|Expected|deepStrictEqual|一致/, 'mutation ' + i));
+  assert.doesNotThrow(() => prep.composeRules(SAMPLE, fragment, { afterMerge: () => {} }));
+});
 test('S05 diffPaths：追加・削除・変更をパスで返す', () => {
   assert.deepStrictEqual(prep.diffPaths({ a: { b: 1, c: 2 } }, { a: { b: 2, d: 3 } }), { added: ['a/d'], removed: ['a/c'], changed: ['a/b'] });
   assert.deepStrictEqual(prep.diffPaths({ a: 1 }, { a: 1 }), { added: [], removed: [], changed: [] });

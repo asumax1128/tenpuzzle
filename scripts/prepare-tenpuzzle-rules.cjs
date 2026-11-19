@@ -39,7 +39,8 @@ function assertOnlyTenpuzzleAdded(current, candidate) {
 }
 
 // 合成：現在のルールに games/tenpuzzle を足した候補を返す
-function composeRules(current, fragment) {
+// opts.afterMerge(candidate)：テスト専用。合成直後の候補を書き換えて、検証（assertOnlyTenpuzzleAdded）が本当に働くことを確かめる
+function composeRules(current, fragment, opts) {
   assert(isObj(current) && isObj(current.rules), '現在のルールが {"rules": {...}} の形ではありません');
   assert(isObj(current.rules.games), 'rules.games がありません（想定外の構造。いろヨミ等のゲームは rules/games 配下にある前提）');
   assert(!('tenpuzzle' in current.rules.games), 'rules.games.tenpuzzle が既にあります。上書きしません（停止）');
@@ -47,6 +48,7 @@ function composeRules(current, fragment) {
   const before = JSON.stringify(current);
   const candidate = JSON.parse(before);
   candidate.rules.games.tenpuzzle = JSON.parse(JSON.stringify(fragment));
+  if (opts && typeof opts.afterMerge === 'function') opts.afterMerge(candidate);
   assert.strictEqual(JSON.stringify(current), before, '入力のルールが書き換えられました');
   assertOnlyTenpuzzleAdded(current, candidate);
   return { candidate, diff: diffPaths(current, candidate) };

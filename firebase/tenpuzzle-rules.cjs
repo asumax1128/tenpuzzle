@@ -86,7 +86,7 @@ function build(opts) {
         '.validate': "newData.hasChild('meta')",
         meta: {
           '.read': AUTH,
-          '.write': `${AUTH} && !data.exists() && $code.matches(/${ROOM_CODE_RE}/) && newData.child('host').val() === auth.uid && newData.parent().child('players').child(auth.uid).exists()`,
+          '.write': `${AUTH} && !data.exists() && $code.matches(/${ROOM_CODE_RE}/) && newData.child('host').val() === auth.uid && !newData.child('guest').exists() && newData.parent().child('players').child(auth.uid).exists()`,
           '.validate': "newData.hasChildren(['v', 'app', 'poolHash', 'host', 'createdAt'])",
           // 2人目（ゲスト）の枠：自分の uid を、空いているときだけ（既存のゲストが退出済みなら入れ替え可）。ホスト自身は取れない
           guest: {
