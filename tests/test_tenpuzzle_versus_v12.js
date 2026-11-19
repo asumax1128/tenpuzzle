@@ -199,10 +199,12 @@ test('S04 ソロ・デイリーの記録に対戦が混ざらない：試合の�
   const a0 = await snap(a); const m = await startMatch(a, b, 1); await waitPlay(a, 0); await solveRound(a, m.sets, 0); await waitFinished(a);
   assert.strictEqual(await snap(a), a0);
 }));
-test('S05 結果画面の「ロビーに戻る」：部屋から出てオンラインのメニューに戻る（再戦は 4-5）', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+test('S05 結果画面の「ロビーに戻る」：部屋から出てオンラインのメニューに戻る（再戦は 4-5）。ホストが出ればゲストも部屋をとじて戻る', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
   const m = await startMatch(a, b, 1); await waitPlay(a, 0); await solveRound(a, m.sets, 0); await waitFinished(a); await waitFinished(b);
+  const aUid = await a.page.evaluate(() => window.__TP_UI.OL.uid);
   await a.page.click('#vs-lobby'); await a.page.waitForSelector('#ol-create');
-  const players = await dbGet('games/tenpuzzle/rooms/' + m.code + '/players'); assert.strictEqual(Object.keys(players || {}).length, 1);
+  const players = await dbGet('games/tenpuzzle/rooms/' + m.code + '/players'); assert(!players || !(aUid in players), 'A は部屋から出た');
+  await b.page.waitForSelector('#ol-create', { timeout: 10000 }); // ホストが抜けた → ゲストも部屋をとじてメニューへ（4-3 の動作）
 }));
 
 (async () => {
