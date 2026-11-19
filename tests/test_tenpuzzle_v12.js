@@ -48,10 +48,12 @@ test('A03 BASE / TIERS は v0.9 と同一', () => { assert.deepStrictEqual(TP.BA
 test('A04 SAVE_VERSION(4) / SAVE_KEY / SETTINGS_KEY は不変', () => { assert.strictEqual(TP.SAVE_VERSION, 4); assert.strictEqual(TP.SAVE_VERSION, V09.TP.SAVE_VERSION); assert.strictEqual(TP.SAVE_KEY, V09.TP.SAVE_KEY); assert.strictEqual(TP.SETTINGS_KEY, 'tenpuzzle_settings_v1'); });
 test('A05 NEXT_MIX_RATE は 0.1（pickNext の10%分岐）', () => { assert.strictEqual(TP.NEXT_MIX_RATE, 0.1); assert.strictEqual(TP.NEXT_MIX_RATE, V09.TP.NEXT_MIX_RATE); });
 test('A06 v0.9 の公開関数は全て v1.0 にも存在', () => { Object.keys(V09.TP).forEach(k => assert(k in TP, k + ' がない')); });
-test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残っている。v1.1 から増えたのは対戦 CORE のみ', () => {
+test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残っている。v1.1 から増えたのは 対戦 CORE（4-1）とロビー CORE（4-3）のみ', () => {
   const added = Object.keys(TP).filter(k => !(k in V09.TP));
   ['BGM', 'PRAISE', 'celebrationFor', 'createBgm', 'praiseFor', 'dailySets', 'drawSets', 'loadDaily'].forEach(k => assert(added.indexOf(k) >= 0, k));
-  assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), ['VERSUS', 'VERSUS_SLOTS', 'poolHash', 'suddenDeathSet', 'versusPoints', 'versusReduce', 'versusSets']);
+  const v41 = ['VERSUS', 'VERSUS_SLOTS', 'poolHash', 'suddenDeathSet', 'versusPoints', 'versusReduce', 'versusSets'];
+  const v43 = ['LOBBY', 'buildCreateUpdate', 'buildJoinUpdate', 'buildStartUpdate', 'isRoomCode', 'joinCheck', 'leavePlan', 'lobbyName', 'lobbyStartPlan', 'lobbyView', 'makeMatchSeed', 'makeRoomCode', 'normalizeRoomCode', 'randomHex16'];
+  assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), v41.concat(v43).sort());
 });
 test('A08 問題プールは v0.9 と同一', () => { assert.deepStrictEqual(POOL, V09.pool); });
 test('A09 canon4：+ × の交換は同一視、− ÷ の向きは別', () => {
@@ -375,6 +377,8 @@ const KNOWN_NONCORE_CHANGES = [
   "case 'ranking': openRanking(); break;",
   "case 'again': openSet(ui.key); break;",
   'function openRanking() {',
+  // 4-3：オンライン用の公開窓口 OL を足した行（ファイル内の出現順）
+  'window.__TP_UI = { bgm: bgm, ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },',
   'openRanking: openRanking, rankNameOk: rankNameOk, rankSubmitAndLoad: rankSubmitAndLoad,'
 ];
 // ===================== G. デイリー選出（v1.1） =====================
@@ -916,8 +920,10 @@ test('P01 CORE：v1.1 から消えた/変わった行は公開リスト末尾の
   const bset = new Set(core(V10.html).split('\n')); const removed = core(V11.html).split('\n').filter(l => !bset.has(l)).map(l => l.trim());
   assert.deepStrictEqual(removed, ['dailyGetUrl: dailyGetUrl, cleanDailyRows: cleanDailyRows, sortDailyRows: sortDailyRows']);
 });
-test('P02 CORE 以外（UI・設定・BGM・デイリー・タイトル）は v1.1 と一字一句同じ', () => {
-  const strip = h => h.replace(/\/\/ ===== CORE_START =====[\s\S]*?\/\/ ===== CORE_END =====/, ''); assert.strictEqual(strip(V10.html), strip(V11.html)); assert(/<title>テンパズル v1\.1<\/title>/.test(V10.html));
+test('P02 CORE 以外：v1.1 から消えた/変わった行は 4-3 のテスト窓口（window.__TP_UI）の1行のみ。他は追加だけ（タイトル表記も v1.1 のまま）', () => {
+  const strip = h => h.replace(/\/\/ ===== CORE_START =====[\s\S]*?\/\/ ===== CORE_END =====/, '');
+  const cur = new Set(strip(V10.html).split('\n')); const removed = strip(V11.html).split('\n').filter(l => !cur.has(l)).map(l => l.trim());
+  assert.deepStrictEqual(removed, ['window.__TP_UI = { bgm: bgm, ui: ui, getSave: function () { return save; }, getSettings: function () { return settings; },']); assert(/<title>テンパズル v1\.1<\/title>/.test(V10.html));
 });
 test('P03 v1.1 の公開関数は全て実装の文字列が同じ（ソロ・デイリー・ランキング・BGM・祝福を含む）。定数も同じ', () => {
   let nf = 0; Object.keys(V11.TP).forEach(k => { const a = V11.TP[k], b = TP[k]; if (typeof a === 'function') { nf++; assert.strictEqual(b.toString(), a.toString(), k); } else assert.deepStrictEqual(b, a, k); });
@@ -929,13 +935,109 @@ test('P04 ソロ・デイリーの動作は v1.1 と一致（solve 全組・dail
   const o = Math.random; try { Math.random = seeded(5); const a = []; for (let i = 0; i < 100; i++) a.push(TP.pickNext(POOL, TP.emptySave(), null)); Math.random = seeded(5); const b = []; for (let i = 0; i < 100; i++) b.push(V11.TP.pickNext(V11.pool, V11.TP.emptySave(), null)); assert.deepStrictEqual(a, b); } finally { Math.random = o; }
   assert.deepStrictEqual(TP.zukanSections(POOL, TP.emptySave()), V11.TP.zukanSections(V11.pool, V11.TP.emptySave()));
 });
-test('P05 問題プールは v1.1 と同一（poolHash も一致）。この版には Firebase・対戦 UI は入っていない', () => {
+test('P05 問題プールは v1.1 と同一（poolHash も一致）。Firebase の SDK は静的に読み込まない（<script src> なし。入口を押したときに動的に読む）。切断（onDisconnect）・結果の書き込みはまだ無い', () => {
   assert.deepStrictEqual(POOL, V11.pool); assert.strictEqual(TP.poolHash(POOL), TP.poolHash(V11.pool));
-  assert(!/firebase|gstatic\.com\/firebasejs/i.test(V10.html)); assert(!/data-act="versus"|rooms\/|onDisconnect/.test(V10.html));
+  assert(!/<script[^>]*src=[^>]*firebase/i.test(V10.html)); assert(!/<link[^>]*firebase/i.test(V10.html)); assert(!/onDisconnect\s*\(/.test(V10.html));
+  assert(/FB_SDK_BASE = 'https:\/\/www\.gstatic\.com\/firebasejs\//.test(V10.html));
 });
 test('P06 対戦 CORE は DOM・通信・時刻に触れない（localStorage / fetch / Date.now / document を参照しない）', () => {
   const src = V10.html.match(/\/\/ ---------- v1\.2：オンライン対戦の CORE[\s\S]*?\n  return \{\n    dict: dict,/)[0]; assert(src.length > 3000);
   assert(!/localStorage|fetch\(|Date\.now|document\.|window\.|Math\.random|firebase/i.test(src.replace(/\/\/[^\n]*/g, '')), '外部に触れている');
+});
+
+
+// ===================== Q. ロビー CORE（v1.2 分割 4-3。通信なしの純関数） =====================
+const ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const HASH = TP.poolHash(POOL);
+const mkRoom = (o) => { o = o || {}; const pl = {}; (o.players === undefined ? [['A', 'あ', true], ['B', 'い', true]] : o.players).forEach(([u, n, r], i) => { pl[u] = { name: n, joinedAt: 1000 + i, online: true, ready: !!r, rematch: false }; });
+  const room = { meta: Object.assign({ v: 1, app: '1.2', poolHash: HASH, host: 'A', createdAt: 1000, guest: 'B' }, o.meta || {}), players: pl }; if (o.noGuest) delete room.meta.guest;
+  if (o.match) room.match = o.match; if (o.rounds) room.rounds = o.rounds; return room; };
+test('Q01 部屋コード：4文字・許可文字（ABCDEFGHJKMNPQRSTUVWXYZ23456789）のみ・乱数関数に対して決定的・全文字が出る', () => {
+  const rr = seeded(9); const seen = new Set(); for (let i = 0; i < 5000; i++) { const c = TP.makeRoomCode(rr); assert(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}$/.test(c), c); [...c].forEach(ch => seen.add(ch)); }
+  assert.strictEqual(seen.size, 31); assert.strictEqual(TP.makeRoomCode(() => 0), 'AAAA'); assert.strictEqual(TP.makeRoomCode(() => 0.9999999), '9999'); assert.strictEqual(TP.makeRoomCode(seeded(5)), TP.makeRoomCode(seeded(5)));
+  assert.strictEqual(TP.LOBBY.CODE_CHARS, ALPHA); ['0', '1', 'I', 'L', 'O'].forEach(ch => assert(ALPHA.indexOf(ch) < 0));
+});
+test('Q02 isRoomCode / normalizeRoomCode：大文字化・全角→半角・空白除去。0・1・I・L・O を勝手に読み替えない', () => {
+  ['ABCD', '2345', 'H2K9', 'UVWX'].forEach(c => assert(TP.isRoomCode(c), c)); ['', 'ABC', 'ABCDE', 'abcd', 'AB0D', 'AB1D', 'ABID', 'ABLD', 'ABOD', 'AB D', 'ＡＢＣＤ', null, undefined, 1234, 'ABC\n'].forEach(c => assert(!TP.isRoomCode(c), String(c)));
+  assert.strictEqual(TP.normalizeRoomCode(' ab cd '), 'ABCD'); assert.strictEqual(TP.normalizeRoomCode('ａｂ２ｄ'), 'AB2D'); assert.strictEqual(TP.normalizeRoomCode('ab　cd'), 'ABCD'); assert.strictEqual(TP.normalizeRoomCode('AB0D'), 'AB0D'); assert.strictEqual(TP.normalizeRoomCode(null), '');
+  assert(TP.isRoomCode(TP.normalizeRoomCode(' ｗｘｙｚ ')));
+});
+test('Q03 対戦で使う名前：ランキングと同じ名前（tenpuzzle_name）。無ければ「プレイヤー」。10文字まで・制御文字なし', () => {
+  assert.strictEqual(TP.lobbyName('ゆうた'), 'ゆうた'); ['', '   ', null, undefined, '\u0001\u0002'].forEach(n => assert.strictEqual(TP.lobbyName(n), 'プレイヤー', String(n)));
+  assert.strictEqual(TP.lobbyName('あ'.repeat(15)), 'あ'.repeat(10)); assert.strictEqual(TP.lobbyName(' はな\n'), 'はな'); assert.strictEqual(TP.LOBBY.DEFAULT_NAME, 'プレイヤー'); assert(TP.lobbyName('x').length >= 1 && TP.lobbyName('x').length <= 10);
+  const st = memStore(); assert.strictEqual(TP.lobbyName(TP.loadName(st)), 'プレイヤー'); TP.saveName(st, 'たろう'); assert.strictEqual(TP.lobbyName(TP.loadName(st)), 'たろう');
+});
+test('Q04 作成の書き込み：meta（v/app/poolHash/host/createdAt）と players/<自uid>（name/joinedAt/online/ready/rematch）。guest は付けない', () => {
+  const ts = { '.sv': 'timestamp' }; const u = TP.buildCreateUpdate('U1', 'ゆうた', ts, 123);
+  assert.deepStrictEqual(Object.keys(u).sort(), ['meta', 'players/U1']); assert.deepStrictEqual(u.meta, { v: 1, app: '1.2', poolHash: 123, host: 'U1', createdAt: ts });
+  assert.deepStrictEqual(u['players/U1'], { name: 'ゆうた', joinedAt: ts, online: true, ready: false, rematch: false }); assert.strictEqual(TP.buildCreateUpdate('U1', '', ts, 1)['players/U1'].name, 'プレイヤー');
+});
+test('Q05 参加の書き込み：meta/guest に自 uid と players/<自uid> を同じ更新で', () => {
+  const ts = { '.sv': 'timestamp' }; const u = TP.buildJoinUpdate('U2', 'はな', ts); assert.deepStrictEqual(Object.keys(u).sort(), ['meta/guest', 'players/U2']); assert.strictEqual(u['meta/guest'], 'U2');
+  assert.deepStrictEqual(u['players/U2'], { name: 'はな', joinedAt: ts, online: true, ready: false, rematch: false });
+});
+test('Q06 参加の可否：部屋なし／版違い／poolHash 不一致／ホスト不在／満員／再入室／空き枠', () => {
+  const j = (room, uid) => TP.joinCheck(room, uid, HASH);
+  assert.deepStrictEqual(j(null, 'C'), { ok: false, reason: 'notfound' }); assert.deepStrictEqual(j({}, 'C'), { ok: false, reason: 'notfound' }); assert.deepStrictEqual(j({ meta: null, players: {} }, 'C'), { ok: false, reason: 'notfound' });
+  assert.deepStrictEqual(j(mkRoom({ meta: { v: 2 } }), 'C'), { ok: false, reason: 'version' });
+  assert.deepStrictEqual(j(mkRoom({ meta: { poolHash: HASH + 1 } }), 'C'), { ok: false, reason: 'poolhash' }); assert.deepStrictEqual(j(mkRoom({ meta: { poolHash: String(HASH) } }), 'C'), { ok: false, reason: 'poolhash' });
+  assert.deepStrictEqual(j(mkRoom(), 'C'), { ok: false, reason: 'full' });
+  assert.deepStrictEqual(j(mkRoom({ players: [['B', 'い', false]] }), 'C'), { ok: false, reason: 'closed' }, 'ホストがいない');
+  assert.deepStrictEqual(j(mkRoom({ players: [['A', 'あ', false]], noGuest: true }), 'C'), { ok: true, rejoin: false });
+  assert.deepStrictEqual(j(mkRoom({ players: [['A', 'あ', false]] }), 'C'), { ok: true, rejoin: false }, 'guest 枠の持ち主が退出済みなら入れ替え可');
+  assert.deepStrictEqual(j(mkRoom(), 'A'), { ok: true, rejoin: true }); assert.deepStrictEqual(j(mkRoom(), 'B'), { ok: true, rejoin: true });
+  assert.deepStrictEqual(j(mkRoom({ players: [['A', 'あ', false], ['X', 'え', false]], noGuest: true }), 'C'), { ok: false, reason: 'full' }, 'players が2人ならゲスト欄が空でも満員');
+  assert.deepStrictEqual(j(mkRoom({ meta: { poolHash: HASH + 1 } }), 'A'), { ok: false, reason: 'poolhash' }, 'poolHash の確認は再入室より先');
+});
+test('Q07 待機画面の見え方：役割・ready・モード・開始可否・開始済み・ホスト不在', () => {
+  const v = (room, uid) => TP.lobbyView(room, uid);
+  const e = v(null, 'A'); assert.strictEqual(e.exists, false); assert.strictEqual(e.role, 'none'); assert.strictEqual(e.canStart, false);
+  let x = v(mkRoom({ players: [['B', 'い', true], ['A', 'あ', false]] }), 'B'); assert.deepStrictEqual(x.players.map(p => p.uid), ['A', 'B'], 'ホストが先'); assert.strictEqual(x.role, 'guest'); assert.strictEqual(x.me.uid, 'B'); assert.strictEqual(x.other.uid, 'A');
+  assert.strictEqual(x.bothReady, false); assert.strictEqual(x.canStart, false); assert.strictEqual(x.canChooseMode, false); assert.strictEqual(x.canReady, true);
+  x = v(mkRoom({ players: [['A', 'あ', true], ['B', 'い', true]] }), 'A'); assert.strictEqual(x.role, 'host'); assert.strictEqual(x.bothReady, true); assert.strictEqual(x.canStart, true); assert.strictEqual(x.canChooseMode, true); assert.strictEqual(x.mode, 3); assert.strictEqual(x.modeChosen, false);
+  assert.strictEqual(v(mkRoom({ players: [['A', 'あ', true], ['B', 'い', true]] }), 'B').canStart, false, 'ゲストは開始できない');
+  assert.strictEqual(v(mkRoom({ players: [['A', 'あ', true]], noGuest: true }), 'A').canStart, false, '1人では開始できない');
+  [1, 3, 5].forEach(m => { const r = v(mkRoom({ match: { mode: m } }), 'A'); assert.strictEqual(r.mode, m); assert.strictEqual(r.modeChosen, true); }); assert.strictEqual(v(mkRoom({ match: { mode: 4 } }), 'A').mode, 3);
+  const st = v(mkRoom({ match: { no: 1, mode: 5, seed: 'ABCD:0123456789abcdef:1', countdownAt: 1 }, rounds: { 0: { startAt: 5000 } } }), 'A'); assert.strictEqual(st.started, true); assert.strictEqual(st.canStart, false); assert.strictEqual(st.canReady, false); assert.strictEqual(st.canChooseMode, false);
+  assert.strictEqual(v(mkRoom({ match: { mode: 5 }, rounds: { 0: { startAt: 5000 } } }), 'A').started, false, 'seed が無ければ開始済みではない');
+  assert.strictEqual(v(mkRoom({ players: [['B', 'い', true]] }), 'B').hostGone, true); assert.strictEqual(v(mkRoom(), 'B').hostGone, false);
+  assert.strictEqual(v(mkRoom(), 'Z').role, 'none'); assert.strictEqual(v(mkRoom(), 'Z').me, null);
+  assert.strictEqual(v(mkRoom({ players: [['A', '', true], ['B', null, true]] }), 'A').players[0].name, 'プレイヤー');
+});
+test('Q08 開始の計画：ホストが両者 ready のときだけ。no は前の試合 +1（最初は 1）。seed は <コード>:<16桁の16進>:<no>。mode は部屋の値', () => {
+  const rr = seeded(3); const ok = mkRoom({ match: { mode: 5 } });
+  const pl = TP.lobbyStartPlan(ok, 'A', 'WXYZ', rr); assert.strictEqual(pl.mode, 5); assert.strictEqual(pl.no, 1); assert(/^WXYZ:[0-9a-f]{16}:1$/.test(pl.seed), pl.seed);
+  assert.strictEqual(TP.lobbyStartPlan(mkRoom({ match: { mode: 1, no: 1 } }), 'A', 'WXYZ', rr).no, 2); assert.strictEqual(TP.lobbyStartPlan(mkRoom(), 'A', 'WXYZ', rr).mode, 3);
+  assert.strictEqual(TP.lobbyStartPlan(ok, 'B', 'WXYZ', rr), null, 'ゲストは不可'); assert.strictEqual(TP.lobbyStartPlan(mkRoom({ players: [['A', 'あ', true], ['B', 'い', false]] }), 'A', 'WXYZ', rr), null, '片方が未 ready'); assert.strictEqual(TP.lobbyStartPlan(ok, 'A', 'ab', rr), null); assert.strictEqual(TP.lobbyStartPlan(null, 'A', 'WXYZ', rr), null);
+  assert.strictEqual(TP.lobbyStartPlan(mkRoom({ rounds: { 0: { startAt: 1 } }, match: { mode: 3, seed: 'ABCD:1:1', no: 1 } }), 'A', 'WXYZ', rr), null, '開始済みは不可');
+  assert.strictEqual(TP.lobbyStartPlan(ok, 'A', 'WXYZ', () => 0).seed, 'WXYZ:0000000000000000:1'); assert.strictEqual(TP.lobbyStartPlan(ok, 'A', 'WXYZ', () => 0.9999999).seed, 'WXYZ:ffffffffffffffff:1');
+  assert.strictEqual(TP.lobbyStartPlan(ok, 'A', 'WXYZ', seeded(8)).seed, TP.lobbyStartPlan(ok, 'A', 'WXYZ', seeded(8)).seed); assert.notStrictEqual(TP.lobbyStartPlan(ok, 'A', 'WXYZ', seeded(8)).seed, TP.lobbyStartPlan(ok, 'A', 'WXYZ', seeded(9)).seed);
+});
+test('Q09 seed から全員が同じ組セットを引ける（versusSets は seed とモードだけで決まる）', () => {
+  const pl = TP.lobbyStartPlan(mkRoom({ match: { mode: 5 } }), 'A', 'WXYZ', seeded(11)); [1, 3, 5].forEach(m => assert.deepStrictEqual(TP.versusSets(POOL, pl.seed, m), TP.versusSets(loadHtml(F10).pool, pl.seed, m)));
+  assert.strictEqual(TP.versusSets(POOL, pl.seed, 5).length, 5);
+});
+test('Q10 開始の書き込み：match（no/mode/seed/countdownAt）と rounds/0/startAt = serverNow+3000 を同じ更新で', () => {
+  const ts = { '.sv': 'timestamp' }; const u = TP.buildStartUpdate({ mode: 3, no: 1, seed: 'WXYZ:0123456789abcdef:1' }, ts, 1700000000000);
+  assert.deepStrictEqual(u, { match: { no: 1, mode: 3, seed: 'WXYZ:0123456789abcdef:1', countdownAt: ts }, 'rounds/0/startAt': 1700000003000 }); assert.strictEqual(TP.LOBBY.START_MS, 3000);
+});
+test('Q11 退出の計画：自分を消す。誰も残らなければ部屋も消す（guest は消さない）', () => {
+  assert.deepStrictEqual(TP.leavePlan(mkRoom(), 'B'), { removePlayer: true, deleteRoom: false }); assert.deepStrictEqual(TP.leavePlan(mkRoom(), 'A'), { removePlayer: true, deleteRoom: false });
+  assert.deepStrictEqual(TP.leavePlan(mkRoom({ players: [['A', 'あ', false]] }), 'A'), { removePlayer: true, deleteRoom: true }); assert.deepStrictEqual(TP.leavePlan(mkRoom({ players: [['A', 'あ', false]] }), 'Z'), { removePlayer: false, deleteRoom: false });
+  assert.deepStrictEqual(TP.leavePlan(null, 'A'), { removePlayer: false, deleteRoom: true });
+});
+test('Q12 純粋関数：入力を書き換えない（凍結した入力でも動く）。ロビー CORE は DOM・通信・時刻・乱数に触れない', () => {
+  const f = o => { Object.freeze(o); Object.values(o).forEach(v => typeof v === 'object' && v && f(v)); return o; }; const room = f(mkRoom({ match: { mode: 5 } }));
+  assert.doesNotThrow(() => { TP.lobbyView(room, 'A'); TP.joinCheck(room, 'C', HASH); TP.lobbyStartPlan(room, 'A', 'WXYZ', seeded(1)); TP.leavePlan(room, 'A'); });
+  const src = V10.html.match(/\/\/ ---------- v1\.2 分割 4-3：オンライン対戦のロビー[\s\S]*?\n  return \{\n    dict: dict,/)[0]; assert(src.length > 3000);
+  assert(!/localStorage|fetch\(|Date\.now|document\.|window\.|Math\.random|firebase|crypto/i.test(src.replace(/\/\/[^\n]*/g, '')), '外部に触れている');
+});
+test('Q13 ルールとの整合：作成・参加・開始の書き込みの形が firebase/tenpuzzle-rules.cjs の想定と一致（キー名・必須項目・guest の置き場所）', () => {
+  const rules = require('../firebase/tenpuzzle-rules.cjs'); const code = rules.rooms.$code;
+  const create = TP.buildCreateUpdate('U', 'a', { '.sv': 'timestamp' }, 1);
+  Object.keys(create.meta).forEach(k => assert(k in code.meta, 'meta.' + k)); Object.keys(create['players/U']).forEach(k => assert(k in code.players.$uid, 'players.' + k)); assert(/hasChildren\(\['name', 'joinedAt', 'online', 'ready', 'rematch'\]\)/.test(code.players.$uid['.validate']));
+  assert('guest' in code.meta); Object.keys(TP.buildStartUpdate({ mode: 3, no: 1, seed: 's' }, 1, 1).match).forEach(k => assert(k in code.match, 'match.' + k)); assert('startAt' in code.rounds['0']);
+  assert.strictEqual(rules.K.FIRST_START_MS, TP.LOBBY.START_MS); assert.strictEqual(rules.ROOM_CODE_RE, '^[' + TP.LOBBY.CODE_CHARS + ']{4}$');
 });
 
 // ===================== F. ブラウザ（Playwright）：配線・設定画面・結果画面の描画 =====================
@@ -1195,7 +1297,7 @@ if (!pw) {
   test('J10 再読み込みしても進捗・点・状態が残る', async () => {
     const p = await pageAt(DS); try {
       await p.page.click('#dailyBtnTitle'); await p.page.click('.dcard[data-slot="1"]'); await solveCurrent(p.page); const pts = await p.page.evaluate(() => window.__TP_UI.ui.result.attempt);
-      await p.page.reload(); await p.page.waitForSelector('#app'); await p.page.evaluate(ms => { window.__TP_UI.setNow(() => ms); window.__TP_UI.handle('title'); }, noonMs(DS));
+      await p.page.reload(); await p.page.waitForFunction(() => !!window.__TP_UI); await p.page.evaluate(ms => { window.__TP_UI.setNow(() => ms); window.__TP_UI.handle('title'); }, noonMs(DS));
       assert.strictEqual((await p.page.locator('#t-daily-n').innerText()).trim(), '1/3'); await p.page.click('#dailyBtnTitle');
       const cs = await dailyCards(p.page); assert.strictEqual(cs[0].st, 'クリア'); assert.strictEqual(cs[0].pts, '+' + pts + '点'); assert.deepStrictEqual(p.errs, []);
     } finally { await p.ctx.close(); }

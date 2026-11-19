@@ -255,6 +255,7 @@ games/tenpuzzle/rooms/<CODE>/
     app: "1.2",                   // クライアントの版（表示用）
     poolHash: <number>,           // fnv1a32(プールの組キーとティアの連結)。不一致なら参加を断る
     host: <uid>,
+    guest: <uid>,                 // 4-2 追記：2人目の uid の枠。参加者は host と guest の2人だけ（作成時には無い。参加時に players/<uid> と同じ更新で書く）
     createdAt: TIMESTAMP
   }
   players/<uid>: {
@@ -272,9 +273,9 @@ games/tenpuzzle/rooms/<CODE>/
     countdownAt: TIMESTAMP        // この時刻＋3000ms が第1問の開始
   }
   rounds/<i>/: {                  // i = 0,1,2,…（延長戦も続き番号）
-    startAt: <ms>,                // サーバー時刻。i=0 は countdownAt+3000、以降は前ラウンド決着＋5000
+    startAt: <ms>,                // サーバー時刻。i=0 は now+3000、以降は前ラウンド決着＋5000（4-2：ルールは ±2000ms の許容幅。後述）
     result: {                     // 書き込みは1回だけ（先着）
-      by: <uid>|null,             // 取った人。時間切れ・引き分けは null
+      by: <uid>|null,             // 取った人（書き込んだ本人）。時間切れは null。forfeit は残った側（相手は meta から決まるので vs は無い）
       kind: "solve"|"declare"|"timeout"|"forfeit",
       expr: "8÷(1-1÷5)"|null,     // 解決時の式（終了時に相手へ開示）
       at: TIMESTAMP
@@ -288,6 +289,32 @@ games/tenpuzzle/rooms/<CODE>/
 ```
 
 - 組キーは DB に書かない。全員が `match.seed` と `mode` から同じ組セットを計算できる（4.2）。ただし `poolHash` で、全員のプールが同一であることを保証する
+
+#### 4.1 の追記：分割 4-2 で確定したルールの解釈（`firebase/tenpuzzle-rules.cjs` の実物に合わせた）
+
+1. **`meta.guest`（追加）**：Realtime Database のルールには子の数を数える式が無く、「players は2人まで」を直接は書けない。そこで2人目の uid を `meta.guest` に持つ。
+   - 参加できるのは `meta.host` と `meta.guest` の本人だけ（＝2人まで）。3人目は guest 枠を取れず、`players` にも入れない。
+   - 部屋作成時に `guest` を入れること、ホストが `guest` 枠を取ることは拒否される。
+   - ゲストが退出した後（`players/<ゲスト>` が無い）は、別の人が `meta.guest` を入れ替えられる。**`meta.guest` 自体の削除はルールが許さない**（退出時に消す操作は無い。空き枠は「players に居ない」ことで判断する）。
+   - 参加の手順：`meta.guest` に自 uid と `players/<自uid>` を**同じ更新**で書く。
+   - 相手の uid が host/guest から決まるため、不戦勝（forfeit）の result に `vs` は付けない（付けると拒否）。再戦の rounds 一括削除も、両者の `rematch` をルールで確認できる。
+2. **`startAt` / `lockUntil` は ±2000ms の許容幅**：クライアントは `ServerValue.TIMESTAMP` に時間を足せないので「now + 3000」ちょうどの値は書けない。ルールは `[now + 基準 − 2000, now + 基準 + 2000]` を許可する（基準：最初のラウンド 3000／次のラウンド 5000／お手つき 10000）。`result.at`・`createdAt`・`countdownAt`・`joinedAt`・`offlineAt` は `now` と厳密一致。
+3. **`match.endedBy` は作らない**：不戦勝は `rounds/<i>/result`（kind: forfeit）だけで表す。試合の状態は結果の列から reducer が導出する。
+4. **再戦の `rounds` 一括削除**：ホストが、ホストとゲスト両方の `rematch=true` のときだけ `rounds` 全体を削除できる。個別の result の削除・書き換えは常に拒否。その後 `match` を新しい番号で書く。
+5. **次ラウンドの `startAt`** は、前ラウンドの result と**同じ更新**でしか書けない。前ラウンドが forfeit なら書けない。ラウンド番号は 0〜7（本戦5＋延長戦最大3）。
+6. **締切**：`solve`/`declare` は `startAt ≤ now ≤ startAt+61000`。`timeout` は `now > startAt+61000`（solve と排他）。`forfeit` は締切後でも書ける。
+7. **読み取り**：参加者は部屋全体を読める。参加前の確認用に `meta` と `players` だけは認証済みなら読める。`rooms` の一覧は読めない。したがって参加前の確認（poolHash・満員）は `meta`／`players` の2か所だけで行う。
+8. **部屋の削除**：参加者が1人もいない部屋は認証済みなら誰でも削除できる。作成から24時間たった部屋は参加者が残っていても削除できる。ホストがゲストのいる部屋から抜けても、その場では部屋を消せない（ゲスト側が「ホストが抜けた」を検知して退出し、最後の1人が消す）。
+
+#### 4.1 の追記：分割 4-3（ロビー）で確定した動作
+
+- 部屋コード：`ABCDEFGHJKMNPQRSTUVWXYZ23456789` から4文字。衝突（meta は上書き不可で拒否される）したら別のコードで最大8回やり直す。入力は大文字化・全角→半角・空白除去（0・1・I・L・O は読み替えない）。
+- 作成：`meta`（v/app/poolHash/host/createdAt）と `players/<自uid>`（name/joinedAt/online/ready/rematch の全項目）を同時に書き、続けて `match = {mode: 3}` を書く（書けなくても続行）。
+- 参加：`meta` と `players` を読み、`poolHash` が自分の `poolHash()` と一致するか確認（不一致なら何も書かずに断る）→ `meta.guest` と `players/<自uid>` を同時に書く。満員・ホスト不在・部屋なしは書かずに断る。
+- 開始：ホストが両者 ready のとき、`match = {no, mode, seed, countdownAt: TIMESTAMP}` と `rounds/0/startAt = サーバー時刻の推定値 + 3000` を同じ更新で書く。`seed = <部屋コード>:<16桁の16進>:<no>`。両画面は「まもなく開始」を表示する（カウントダウンと対戦本体は 4-4）。
+- 名前：ランキングと同じ名前（`tenpuzzle_name`）。無ければ「プレイヤー」。
+- 退出：自分の `players` を消す。残りが誰もいなければ部屋も消す。
+- 切断（onDisconnect）・結果（result）・live の書き込みは 4-4／4-5。ロビーでは在席フラグ（online）を `true` で書くだけで、タブを閉じても `false` にはならない。
 - 1試合あたりの書き込みは、ラウンドごとに result 1回・startAt 1回・live 数回程度で、通信量は無視できる
 
 ### 4.2 組セット生成（drawSets の再利用）
@@ -342,7 +369,7 @@ v1.1 の `drawSets(pool, seed, slots, exclude)` に、枠定義とシード文�
   さらに `.info/connected` が true になるたびに `update({ online: true, offlineAt: null })` を書き、`onDisconnect` を再登録する
 - 相手の `online` が false になったら、表示を「あいての接続を待っています（あと N 秒）」にする。N は `offlineAt + 猶予 − serverNow()`。ラウンドの時計は止めない
 - 猶予内に戻った場合は続行する。不在中に終わったラウンドは、通常どおり相手の解決または時間切れとして確定している
-- 猶予を過ぎた場合は、残った側が `rounds/<現在>/result = { by: 自分, kind: "forfeit" }` と `match/endedBy: "forfeit"` を書く。ルールは `root.child(相手).child('online').val() == false && now >= 相手.offlineAt + 猶予` を検証する
+- 猶予を過ぎた場合は、残った側が `rounds/<現在>/result = { by: 自分, kind: "forfeit", at: TIMESTAMP }` を書く（4-2：`match/endedBy` は作らない。相手の uid は meta の host/guest から決まる）。ルールは `players/<相手>/online == false && now >= 相手.offlineAt + 30000` を検証する
 - 2人とも切断した部屋は、次に部屋を作る人のクライアントが掃除する（`createdAt` から24時間以上経ち、全員が offline の部屋を削除。ルールで条件を検証）。いろヨミの掃除方式があれば合わせる【要確認】
 - 匿名認証の uid は同じブラウザなら保たれる。部屋コードを `sessionStorage` に保存し、再読み込みや画面ロック解除後に同じ部屋へ自動で戻る
 
@@ -378,7 +405,7 @@ v1.1 の `drawSets(pool, seed, slots, exclude)` に、枠定義とシード文�
                            ".validate": "players が2人以下・name 1〜10文字" } },
     "match":   { ".write": "auth != null && root...meta.host == auth.uid" },
     "rounds":  { "$i": {
-       "startAt": { ".write": "参加者 && !data.exists()", ".validate": "newData.val() == now + 3000 || newData.val() == now + 5000" },
+       "startAt": { ".write": "参加者 && !data.exists()", ".validate": "now + 3000（または 5000）の ±2000ms ／ 次ラウンドは前の result と同じ更新" },
        "result":  { ".write": "参加者 && !data.exists()",
                     ".validate": "at == now && (kind=='timeout' ? now > startAt+61000 : now <= startAt+61000) && (kind=='forfeit' ? 相手 offline && now >= 相手.offlineAt + 猶予 : true)" } } },
     "live":    { "$uid": { ".write": "auth.uid == $uid", ".validate": "cards 1〜4、lockUntil は 0 か now+10000" } }
