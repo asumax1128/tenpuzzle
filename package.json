@@ -5,12 +5,15 @@
   "scripts": {
     "test:rules": "firebase emulators:exec --only database --project demo-tenpuzzle \"node tests/test_tenpuzzle_rules_v12.js\"",
     "test:prepare": "node tests/test_tenpuzzle_prepare_rules_v12.js",
-    "test:solo": "node tests/test_tenpuzzle_v12.js"
+    "test:solo": "node tests/test_tenpuzzle_v12.js",
+    "test:candidate": "firebase emulators:exec --only database --project demo-tenpuzzle \"node tests/test_tenpuzzle_candidate_v12.js\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "3.0.4",
     "firebase": "10.14.1",
     "firebase-tools": "13.35.1"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

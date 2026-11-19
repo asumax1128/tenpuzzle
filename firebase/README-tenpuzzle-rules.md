@@ -33,6 +33,13 @@ node scripts/prepare-tenpuzzle-rules.cjs --current console-rules.json
 # 3) 候補を確認してから、コンソールで手動で公開する（このスクリプトはデプロイしない）
 ```
 
+## 候補ルール（生成済み）
+
+- `firebase/candidates/console-rules-current-2026-11-19.json` … 福山から受け取った「現在のコンソールルール」（改行を LF に、インデントを2スペースにそろえただけ。内容は同一）
+- `firebase/candidates/database.rules.tenpuzzle-candidate.json` … 上に `games/tenpuzzle` だけを足した候補（`scripts/prepare-tenpuzzle-rules.cjs --no-git` で生成）
+- 確認: `diff` すると、候補は現在のルールに 355 行（`games.tenpuzzle`）を**追加しただけ**で、削除・変更は 0 行。`npm run test:candidate` で、既存ゲームの挙動が同じこと・tenpuzzle が動くことをエミュレータで確認できる
+- 公開は Firebase コンソールで手動（コンソールに貼る前に、もう一度コンソールから現在のルールを書き出して、スクリプトで作り直すと安心）
+
 ## 設計書 4.1 からの変更・追加（4-2 で確定。設計書に反映してください）
 
 1. **`meta.guest`**：Realtime Database のルールには子の数を数える式が無いため、2人目（ゲスト）の uid を `meta.guest` に持つ。参加者は `meta.host` と `meta.guest` の2人だけ。3人目は guest 枠を取れず、`players` にも入れない。ゲストが退出済みなら、別の人が guest 枠に入れ替われる。
