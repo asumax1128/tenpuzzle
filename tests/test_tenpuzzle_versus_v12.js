@@ -159,10 +159,10 @@ test('M05 時間切れ → 延長戦：1組で誰も解かない → 両画面�
   const sd = TP.suddenDeathSet(POOL, m.seed, 1, m.sets.map(x => x.key)); await solveRound(b, [sd], 0);
   await waitFinished(a); await waitFinished(b); const [fa, fb] = await bothConsistent(a, b); assert.strictEqual(fb.outcome, 'win'); assert.strictEqual(fa.endedBy, 'suddenDeath');
 }));
-test('M06 時間切れの進行は片方が落ちていても止まらない：B のタブを閉じても、A が timeout を書いて次の問題へ進む', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
-  const m = await startMatch(a, b, 3); await waitPlay(a, 0); await waitPlay(b, 0); await b.ctx.close();
+test('M06 時間切れの進行は片方のクライアントが書けなくても止まらない：B の時間切れ書き込みを止めても、A が timeout を書いて次の問題へ進む（※タブを閉じる場合は 4-5 の不戦勝が先に成立するので D01 で扱う）', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
+  const m = await startMatch(a, b, 3); await waitPlay(a, 0); await waitPlay(b, 0); await b.page.evaluate(() => { window.__TP_UI.VSS.timeoutInflight = true; }); // B は時間切れを書きにいかない（落ちている相当）
   await waitPlay(a, 1, ROUND_MS + 12000); const r0 = await dbGet('games/tenpuzzle/rooms/' + m.code + '/rounds/0/result'); assert.strictEqual(r0.kind, 'timeout');
-  assert((await text(a, '#vs-label')).includes('第2問 / 3'));
+  assert((await text(a, '#vs-label')).includes('第2問 / 3')); await waitPlay(b, 1, 8000);
 }));
 test('M07 延長戦の上限：1組で本戦＋延長戦3回が全部時間切れ → 両画面で「引き分け」。延長戦の表示は 1→2→3 回目で reducer と一致', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
   const m = await startMatch(a, b, 1); const seen = new Set();
