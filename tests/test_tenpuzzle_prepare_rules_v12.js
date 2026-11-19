@@ -113,9 +113,9 @@ test('S15 論理代入演算子（Apps Script で構文エラーになるもの�
   const OPS = new RegExp(['\\?\\?=', '\\|\\|=', '&'.repeat(2) + '='].join('|'));
   ['../scripts/prepare-tenpuzzle-rules.cjs', '../firebase/tenpuzzle-rules.cjs', 'test_tenpuzzle_prepare_rules_v12.js', 'test_tenpuzzle_rules_v12.js'].forEach(f => assert(!OPS.test(fs.readFileSync(path.join(__dirname, f), 'utf8').replace(/\/\/[^\n]*/g, '')), f));
 });
-test('S16 HTML 本体・ソロの CORE には触れていない（このブランチで prototype-*.html が v1.2 コミット ed6036d から変わっていない）', () => {
-  const r = sh('git', ['diff', '--stat', 'ed6036d', '--', 'prototype-tenpuzzle-v12.html', 'prototype-tenpuzzle-v11.html', 'index.html'], path.join(__dirname, '..'));
-  if (r.status === 0) assert.strictEqual(r.stdout.trim(), '', r.stdout);
+test('S16 合成スクリプトは HTML 本体・ソロの CORE を読み書きしない（扱うのはルールの JSON と断片だけ）', () => {
+  const src = fs.readFileSync(SCRIPT, 'utf8').replace(/\/\/[^\n]*/g, '');
+  assert(!/\.html|prototype-tenpuzzle|index\.html|CORE_START/.test(src)); const writes = [...src.matchAll(/fs\.(writeFileSync|appendFileSync|renameSync|rmSync|unlinkSync)\(/g)].map(m => m[1]); assert.deepStrictEqual(writes, ['writeFileSync'], '書き込みは候補の出力1か所だけ');
 });
 
 (async () => {
