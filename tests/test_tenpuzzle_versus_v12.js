@@ -223,7 +223,7 @@ async function reducerOf(code) {
 test('D01 試合中に片方のタブを閉じる → 相手画面に切断表示と猶予カウントダウン → 猶予（テストでは6秒）後に不戦勝が成立。残った側は勝ち、結果が versusReduce と一致', withPlayers(['あきら', 'べにこ'], async ([a, b]) => {
   const m = await startMatch(a, b, 3); await waitPlay(a, 0); await waitPlay(b, 0);
   const bUid = await uidOf(b), aUid = await uidOf(a); await b.page.close();
-  await waitOffline(a); const t0 = await a.page.evaluate(() => Number(document.querySelector('#vs-offline-sec').textContent)); assert(t0 >= 1 && t0 <= 6, '猶予カウントダウン ' + t0);
+  await waitOffline(a); const t0 = await a.page.evaluate(() => Number(document.querySelector('#vs-offline-sec').textContent)); assert(t0 >= 1 && t0 <= 7, '猶予カウントダウン（切り上げ）' + t0);
   assert((await text(a, '#vs-offline')).includes('相手の接続が切れました'));
   const off = await roomOf(m.code); assert.strictEqual(off.players[bUid].online, false); assert.strictEqual(typeof off.players[bUid].offlineAt, 'number');
   await waitFinished(a, 25000); const va = await view(a); assert.strictEqual(va.outcome, 'win'); assert.strictEqual(va.endedBy, 'forfeit');

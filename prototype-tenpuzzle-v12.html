@@ -2121,6 +2121,13 @@ var TP = (function () {
   // 在席の書き込み（ルールが要求する形）：切断時（onDisconnect）と退出時は online:false＋offlineAt=now、復帰時は online:true＋offlineAt 削除
   function buildOfflineUpdate(ts) { return { online: false, offlineAt: ts }; }
   function buildOnlineUpdate() { return { online: true, offlineAt: null }; }
+  // onDisconnect に登録する書き込み：自分の players の全項目（name / joinedAt は今の値のまま、online:false、offlineAt=サーバー時刻、ready / rematch は false）。
+  //   update（{online:false, offlineAt} だけ）ではなく set にしているのは、エミュレータが onDisconnect の update をキーごとの別の書き込みとして検証し、
+  //   ルールの「online と offlineAt はセットで検証」を通らなかったため。set なら 1 回の書き込みとして検証され、ルールにも通る。
+  function buildDisconnectRecord(cur, ts) {
+    if (!cur || typeof cur !== 'object' || typeof cur.name !== 'string' || typeof cur.joinedAt !== 'number') return null;
+    return { name: cur.name, joinedAt: cur.joinedAt, online: false, offlineAt: ts, ready: false, rematch: false };
+  }
   // 再接続用に sessionStorage へ持つ値：{ code, role, uid }。壊れた値は null
   var RESUME_KEY = 'tenpuzzle_online_room';
   function encodeResume(code, role, uid) { return JSON.stringify({ code: code, role: role === 'host' ? 'host' : 'guest', uid: uid }); }
@@ -2191,7 +2198,7 @@ var TP = (function () {
     lobbyStartPlan: lobbyStartPlan, buildStartUpdate: buildStartUpdate, leavePlan: leavePlan,
     VS: VS, vsTiming: vsTiming, versusPlayers: versusPlayers, versusResults: versusResults, versusSchedule: versusSchedule, verifySolveExpr: verifySolveExpr,
     versusView: versusView, versusResultUpdate: versusResultUpdate,
-    buildOfflineUpdate: buildOfflineUpdate, buildOnlineUpdate: buildOnlineUpdate, RESUME_KEY: RESUME_KEY, encodeResume: encodeResume, parseResume: parseResume,
+    buildOfflineUpdate: buildOfflineUpdate, buildOnlineUpdate: buildOnlineUpdate, buildDisconnectRecord: buildDisconnectRecord, RESUME_KEY: RESUME_KEY, encodeResume: encodeResume, parseResume: parseResume,
     rematchState: rematchState, rematchPlan: rematchPlan
   };
 })();
@@ -3180,8 +3187,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = TP;
   }
   function olPresenceOn() {
     if (OL.step !== 'room' || OL.leaving || !OL.ref || !OL.room || !OL.room.players || !OL.room.players[OL.uid]) return;
-    var me = OL.ref.child('players/' + OL.uid);
-    me.onDisconnect().update(TP.buildOfflineUpdate(olTs())).then(function () { return me.update(TP.buildOnlineUpdate()); }).catch(function () { /* 在席は表示用。失敗しても対戦は続ける */ });
+    var me = OL.ref.child('players/' + OL.uid), rec = TP.buildDisconnectRecord(OL.room.players[OL.uid], olTs());
+    if (!rec) return;
+    me.onDisconnect().set(rec).then(function () { return me.update(TP.buildOnlineUpdate()); }).catch(function () { /* 在席は表示用。失敗しても対戦は続ける */ });
   }
   function olDisarmPresence() {
     if (OL.connRef && OL.connHandler) { try { OL.connRef.off('value', OL.connHandler); } catch (e) { /* 続行 */ } }

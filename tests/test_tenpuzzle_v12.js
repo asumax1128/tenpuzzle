@@ -56,7 +56,7 @@ test('A07 v1.0 の祝福/BGM・v1.1 のデイリーの公開名は残ってい�
   const v41 = ['VERSUS', 'VERSUS_SLOTS', 'poolHash', 'suddenDeathSet', 'versusPoints', 'versusReduce', 'versusSets'];
   const v43 = ['LOBBY', 'buildCreateUpdate', 'buildJoinUpdate', 'buildStartUpdate', 'isRoomCode', 'joinCheck', 'leavePlan', 'lobbyName', 'lobbyStartPlan', 'lobbyView', 'makeMatchSeed', 'makeRoomCode', 'normalizeRoomCode', 'randomHex16'];
   const v44 = ['VS', 'verifySolveExpr', 'versusPlayers', 'versusResultUpdate', 'versusResults', 'versusSchedule', 'versusView', 'vsTiming'];
-  const v45 = ['RESUME_KEY', 'buildOfflineUpdate', 'buildOnlineUpdate', 'encodeResume', 'parseResume', 'rematchPlan', 'rematchState'];
+  const v45 = ['RESUME_KEY', 'buildDisconnectRecord', 'buildOfflineUpdate', 'buildOnlineUpdate', 'encodeResume', 'parseResume', 'rematchPlan', 'rematchState'];
   assert.deepStrictEqual(Object.keys(TP).filter(k => !(k in V11.TP)).sort(), v41.concat(v43, v44, v45).sort());
 });
 test('A08 問題プールは v0.9 と同一', () => { assert.deepStrictEqual(POOL, V09.pool); });
@@ -941,7 +941,7 @@ test('P04 ソロ・デイリーの動作は v1.1 と一致（solve 全組・dail
 });
 test('P05 問題プールは v1.1 と同一（poolHash も一致）。Firebase の SDK は静的に読み込まない（<script src> なし。入口を押したときに動的に読む）。onDisconnect は 4-5 で入った', () => {
   assert.deepStrictEqual(POOL, V11.pool); assert.strictEqual(TP.poolHash(POOL), TP.poolHash(V11.pool));
-  assert(!/<script[^>]*src=[^>]*firebase/i.test(V10.html)); assert(!/<link[^>]*firebase/i.test(V10.html)); assert(/onDisconnect\(\)\.update\(TP\.buildOfflineUpdate\(olTs\(\)\)\)/.test(V10.html), '4-5：onDisconnect で在席を書く');
+  assert(!/<script[^>]*src=[^>]*firebase/i.test(V10.html)); assert(!/<link[^>]*firebase/i.test(V10.html)); assert(/onDisconnect\(\)\.set\(rec\)/.test(V10.html) && /buildDisconnectRecord\(OL\.room\.players\[OL\.uid\], olTs\(\)\)/.test(V10.html), '4-5：onDisconnect で在席を書く');
   assert(/FB_SDK_BASE = 'https:\/\/www\.gstatic\.com\/firebasejs\//.test(V10.html));
 });
 test('P06 対戦 CORE は DOM・通信・時刻に触れない（localStorage / fetch / Date.now / document を参照しない）', () => {
@@ -1147,11 +1147,15 @@ test('W10 対戦の CORE は DOM・通信・時刻・乱数・セーブに触れ
 
 // ===================== X. 切断・再接続・再戦の CORE（v1.2 分割 4-5。通信なしの純関数） =====================
 const withPl = (room, patch) => { const r = JSON.parse(JSON.stringify(room)); Object.keys(patch).forEach(u => Object.assign(r.players[u], patch[u])); return r; };
-test('X01 在席の書き込みの形：切断・退出は online:false＋offlineAt、復帰は online:true＋offlineAt 削除（ルールの players 検証と一致）', () => {
+test('X01 在席の書き込みの形：退出は online:false＋offlineAt、復帰は online:true＋offlineAt 削除、切断（onDisconnect）は players の全項目を set（ルールの players 検証と一致）', () => {
   const ts = { '.sv': 'timestamp' }; assert.deepStrictEqual(TP.buildOfflineUpdate(ts), { online: false, offlineAt: ts }); assert.deepStrictEqual(TP.buildOnlineUpdate(), { online: true, offlineAt: null });
-  const rules = require('../firebase/tenpuzzle-rules.cjs'); const pl = rules.rooms.$code.players.$uid; ['online', 'offlineAt'].forEach(k => assert(k in pl, k));
+  const cur = { name: 'ゆうた', joinedAt: 123, online: true, ready: true, rematch: true }; const rec = TP.buildDisconnectRecord(cur, ts);
+  assert.deepStrictEqual(rec, { name: 'ゆうた', joinedAt: 123, online: false, offlineAt: ts, ready: false, rematch: false }); assert.strictEqual(cur.ready, true, '入力を書き換えない');
+  [null, {}, { name: 'a' }, { joinedAt: 1 }, { name: 5, joinedAt: 1 }, { name: 'a', joinedAt: '1' }].forEach(c => assert.strictEqual(TP.buildDisconnectRecord(c, ts), null, JSON.stringify(c)));
+  const rules = require('../firebase/tenpuzzle-rules.cjs'); const pl = rules.rooms.$code.players.$uid; Object.keys(rec).forEach(k => assert(k in pl, k));
+  assert(/hasChildren\(\['name', 'joinedAt', 'online', 'ready', 'rematch'\]\)/.test(pl['.validate'])); Object.keys(rec).forEach(k => k === 'offlineAt' || assert(rec[k] !== undefined));
   assert(/online'\)\.val\(\) === true && !newData\.child\('offlineAt'\)\.exists\(\)/.test(pl['.validate'])); assert(/online'\)\.val\(\) === false && newData\.child\('offlineAt'\)\.exists\(\)/.test(pl['.validate']));
-  assert(/newData\.val\(\) === now/.test(pl.offlineAt['.validate']), 'offlineAt はサーバー時刻（TIMESTAMP）');
+  assert(/newData\.val\(\) === now/.test(pl.offlineAt['.validate']), 'offlineAt はサーバー時刻（TIMESTAMP）'); assert(/data\.exists\(\) \? newData\.val\(\) === data\.val\(\)/.test(pl.joinedAt['.validate']), 'joinedAt は今の値のまま');
 });
 test('X02 再接続の記録：encodeResume / parseResume の往復。壊れた値・コード不正・役割不正・uid なしは null', () => {
   const raw = TP.encodeResume('WXYZ', 'host', 'U1'); assert.deepStrictEqual(TP.parseResume(raw), { code: 'WXYZ', role: 'host', uid: 'U1' }); assert.deepStrictEqual(TP.parseResume(TP.encodeResume('ABCD', 'x', 'U2')), { code: 'ABCD', role: 'guest', uid: 'U2' });
