@@ -1068,6 +1068,17 @@ test('W03 出題の並び：本戦は versusSets と同じ。延長戦 n 回目�
     assert.strictEqual(new Set(s.map(x => x.key)).size, s.length); });
   assert.strictEqual(TP.versusSchedule(POOL, '', 3, 3), null);
 });
+test('W03b 延長戦の組は、本戦と前の延長戦の組を必ず避ける（seed 1000 通り × 3回：重複なし・suddenDeathSet(used) と一致）', () => {
+  for (let k = 0; k < 1000; k++) { const seed = 'WXYZ:' + (k * 2654435761 >>> 0).toString(16).padStart(16, '0') + ':1'; [1, 5].forEach(mode => { const s = TP.versusSchedule(POOL, seed, mode, mode + 3); assert.strictEqual(new Set(s.map(x => x.key)).size, s.length, seed + ' / ' + mode); }); }
+});
+test('W06b 5組勝負でも延長戦では「作れません」を出さない（本戦の5問だけ）', () => {
+  // 本戦5問の結果の組み合わせ（A/B/時間切れ）から、同点になって延長戦に入るものを探す（点は組のティアで決まるので、手で決め打ちしない）
+  let tie = null;
+  for (let c = 0; c < 243 && !tie; c++) { const res = []; let x = c; for (let i = 0; i < 5; i++) { const d = x % 3; x = Math.floor(x / 3); res.push(d === 0 ? RS('A') : d === 1 ? RS('B') : RS(null, 'timeout')); }
+    const room = mkMatch(5, { results: res }); const v = TP.versusView(room, 'A', POOL, 1e12); if (!v.finished && v.round && v.round.sudden) tie = v; }
+  assert(tie, '延長戦に入る組み合わせが見つからない'); assert.strictEqual(tie.round.label, '延長戦 1回目'); assert.strictEqual(tie.canDeclare, false);
+  assert.strictEqual(TP.versusView(mkMatch(5, { results: [RS('A')] }), 'A', POOL, 26000).canDeclare, true, '本戦の2問目は出す');
+});
 test('W04 相手の式の検証：全ての解ける組の example（infix の表記）は検証を通る。数字違い・値違い・読めない式は理由つきで不合格', () => {
   POOL.filter(e => e.solvable).forEach(e => { assert(TP.verifySolveExpr(e.example, e.digits).ok, e.example); assert(TP.verifySolveExpr(TP.infix(TP.parse(e.example)), e.digits).ok); });
   const e = POOL.find(x => x.solvable && x.digits.join('') === '1114'); assert.deepStrictEqual(TP.verifySolveExpr('(1+1)×(1+3)', e.digits), { ok: false, reason: 'digits' });
