@@ -330,6 +330,15 @@ games/tenpuzzle/rooms/<CODE>/
 - 途中参加の防止：参加の書き込みの直後に `match`／`rounds` を読み、試合が始まっていれば自分の players を消して「対戦中です」と表示する。
 - 対戦の結果はソロのセーブ・デイリーの記録・図鑑に一切書かない（画面表示のみ）。盤面もソロの盤面とは別に持つ。
 
+#### 4.1 の追記：分割 4-5（切断・再戦）で確定した動作
+
+- **在席（onDisconnect）**：部屋に入ったら、`.info/connected` が true になるたびに ① `players/<自uid>` に onDisconnect を登録し、② `{online:true, offlineAt:null}` を書く（先に登録してから online:true）。登録する書き込みは `update({online:false, offlineAt:TIMESTAMP})` ではなく、**players の全項目の `set`**（name・joinedAt は今の値のまま、online:false、offlineAt=サーバー時刻、ready・rematch は false）。理由：エミュレータは onDisconnect の `update` をキーごとの別の書き込みとして検証し、ルールの「online と offlineAt はセットで検証」を通らなかったため（`set` なら1回の書き込みとして通る）。**本番（実機）での onDisconnect の挙動は残課題**。
+- **切断の表示と不戦勝**：相手の `online:false` を見たら「相手の接続が切れました。まっています…（あと N 秒）」を出す。N は `offlineAt + 30000 − serverNow`。ラウンドの時計は止めない。猶予＋0.3秒を過ぎたら、残った側のクライアントが `rounds/<現在>/result = {kind:'forfeit', by:自uid, at:TIMESTAMP}` を書く（次の startAt は書かない。0.7秒ごとに再試行）。reducer が試合を終える（endedBy: forfeit）。
+- **試合途中の退出**：確認ダイアログ（「やめると、あいての不戦勝になります」）→ 自分の `{online:false, offlineAt:TIMESTAMP}` を書き、onDisconnect を取り消して部屋を出る。**players は消さない**（相手が不戦勝を請求できるよう、ルールが `players/<相手>` の存在を要求するため）。
+- **再接続**：部屋コード・役割・uid を `sessionStorage`（`tenpuzzle_online_room`）に持つ。再読み込みの起動時、記録があればオンラインへ接続し、自分の `players/<uid>` が部屋にあれば同じ部屋へ戻る（出題中・開示・終了のどれかは `versusView` が決める）。戻れなければ記録を消してメニューへ。自分から出た・部屋が消えたときも記録を消す。**別のタブで開き直した場合は戻らない**（sessionStorage はタブごと）。
+- **再戦**：終了画面の「もう一局」で自分の `players/<uid>/rematch` を切り替える。両者が true になったら、ホストだけが `rounds` を一括削除し、`match`（同じモード・試合番号+1・新しい seed）と `rounds/0/startAt` を書く。新しい試合が始まったら各自が自分の rematch を false に戻す。片方だけのときは「相手の応答を待っています」／「相手が もう一局 をのぞんでいます」。相手が部屋を出たら「相手が部屋を出ました」で再戦は成立しない（「ロビーに戻る」＝部屋を出る）。
+- ロビーでも、相手が切断中（online:false）のときは「はじめる」を押せない。
+
 ### 4.2 組セット生成（drawSets の再利用）
 
 v1.1 の `drawSets(pool, seed, slots, exclude)` に、枠定義とシード文字列を渡すだけにする。新しく足す CORE 関数は `versusSets(pool, seed, mode)` と `suddenDeathSet(pool, seed, n, used)` の2つ。
